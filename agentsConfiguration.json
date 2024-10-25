@@ -1,0 +1,35 @@
+{
+    "general": {
+        "scenario_name": "SACTest1",
+        "start_time": "1 Jan 2024 00:00:00.000",
+        "stop_time": "2 Jan 2024 00:00:00.000",
+        "propagator": "HPOP"
+    },
+    "agents": [
+        {
+            "position": {
+                "reference_frame": "ICRF",
+                "coordinate_system": "Classical",
+                "initial_state": {
+                    "a": 7000,
+                    "e": 0,
+                    "i": 0,
+                    "raan": 0,
+                    "aop": 0,
+                    "ta": 0,
+                    "az": 90.0,
+                    "el": 0.0
+                }
+            },
+            "sensor": {
+                    "pattern": "Simple Conic",
+                    "cone_angle": 30,
+                    "resolution": 0.1,
+                    "initial_azimuth": 90,
+                    "initial_elevation": 80
+            },
+            "states_features": ["a", "e", "i", "raan", "aop", "ta", "az", "el"],
+            "actions_features": ["az", "el"]
+        }
+    ]
+}
