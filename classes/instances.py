@@ -442,18 +442,8 @@ class STKEnvironment():
             access_data_provider = access.DataProviders.Item("Access Data").Exec(scenario.StartTime, date_mg.current_date)
             access_data_providers.append(access_data_provider)
 
-        n_obs = 0
-
-        # Iterate over the access data providers
-        for access_data_provider in access_data_providers:
-            # Check if the access is valid
-            if access_data_provider.Intervals.Count > 0:
-                n_obs += 1
-                data = 0
-
-            # CALCULATE THE REWARD BASED ON THE ACCESS DATA
-            # ---------------------------------------------
-            reward = rewarder.calculate_reward(data, satellite, sensor_mg, feature_mg, date_mg)
+        # Call the rewarder to calculate the reward
+        reward = rewarder.calculate_reward(access_data_providers, satellite, sensor_mg, feature_mg, date_mg)
 
         return reward
 

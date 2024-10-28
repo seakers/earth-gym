@@ -314,8 +314,17 @@ class Rewarder():
         self.class_type = "Rewarder"
         self.reward = 0
 
-    def calculate_reward(self, data, satellite, sensor_mg, feature_mg, date_mg):
+    def calculate_reward(self, access_data_providers, satellite, sensor_mg, feature_mg, date_mg):
         """
         Return the reward of the state-action pair.
         """
+        # Initiate number of observations
+        n_obs = 0
+
+        # Iterate over the access data providers
+        for access_data_provider in access_data_providers:
+            # Check if the access is valid
+            if access_data_provider.Intervals.Count > 0:
+                n_obs += 1
+
         return self.reward

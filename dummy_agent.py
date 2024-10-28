@@ -46,7 +46,7 @@ if __name__ == "__main__":
             "agent_id": 0,
             "action": {
                 "d_az": 0.5,
-                "d_el": 0.0
+                "d_el": -5.0
             },
             "delta_time": 89.789
         }
