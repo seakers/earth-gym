@@ -30,7 +30,6 @@ class DataFromJSON():
 class DateManager():
     """
     Class to understand and manage the date and time of the simulation. Functions:
-    - __init__: sets the current date and time of the simulation.
     - simplify_date: returns the date in a simplified, more readable format.
     - fancy_date: returns the date in the fancy stk-used format.
     - month_to_number: returns the number of the month.
@@ -306,3 +305,17 @@ class FeaturesManager():
         long_to_short = {"Semi-major Axis": "a", "Eccentricity": "e", "Inclination": "i", "RAAN": "raan", "Arg of Perigee": "aop", "True Anomaly": "ta"}
         return long_to_short[long_name]
 
+class Rewarder():
+    """
+    Class to manage the reward of the model. Functions:
+    - reward_agent: return the reward of the state-action pair.
+    """
+    def __init__(self):
+        self.class_type = "Rewarder"
+        self.reward = 0
+
+    def calculate_reward(self, data, satellite, sensor_mg, feature_mg, date_mg):
+        """
+        Return the reward of the state-action pair.
+        """
+        return self.reward

@@ -65,7 +65,7 @@ class Gym():
         """
         Perform final displays of the period.
         """
-        pass
+        self.stk_env.stk_root.SaveScenario()
     
     def handle_request(self, request):
         """
@@ -129,16 +129,16 @@ class STKEnvironment():
         self.current_dates = []
 
         # Build the satellites by iterating over the agents
-        for i, agent in enumerate(self.agents_config["agents"]):
+        for i, agent in enumerate(agents_config["agents"]):
             agent = DataFromJSON(agent, "agent").get_dict()
             satellite, sensor_mg, features_mg = self.build_satellite(agent, self.scenario, i)
-            date_mg = DateManager(agents_config["start_time"], agents_config["stop_time"])
+            date_mg = DateManager(self.scenario.StartTime, self.scenario.StopTime)
             self.satellites_tuples.append((satellite, sensor_mg, features_mg, date_mg)) # append the satellite, its sensor manager and its date manager
 
         # Add the zones of interest
         self.draw_event_zones(evpt_file_path, self.stk_root, self.scenario)
 
-    def build_scenario(self, root, agents_config):
+    def build_scenario(self, root: AgStkObjectRoot, agents_config) -> IAgStkObject:
         """
         Build the scenario based on the agent configuration.
         """
@@ -151,7 +151,7 @@ class STKEnvironment():
         root.Rewind()
         return scenario
 
-    def build_satellite(self, agent, scenario, idx):
+    def build_satellite(self, agent, scenario: IAgStkObject, idx) -> tuple[IAgStkObject, SensorManager, FeaturesManager]:
         """
         Add a satellite to the scenario.
         """
@@ -278,7 +278,7 @@ class STKEnvironment():
         event_zones = pd.read_csv(file_path)
 
         # Trim the data to 1000 sampled zones
-        zones = event_zones.sample(10, ignore_index=True)
+        zones = event_zones.sample(300, ignore_index=True)
 
         # Define specific objects or grid zones to check for coverage
         for i in range(zones.shape[0]):
@@ -350,12 +350,10 @@ class STKEnvironment():
         state = self.get_state(agent_id)
 
         # Get the reward
-        reward = self.get_reward(agent_id)
+        reward = self.get_reward(agent_id, self.scenario)
 
         # Check if the episode is done
         done = self.check_done(agent_id)
-
-        ### CONTINUE ###
 
         return state, reward, done
     
@@ -408,11 +406,56 @@ class STKEnvironment():
 
         return [value for value in state.values()]
 
-    def get_reward(self, agent_id):
+    def get_reward(self, agent_id, scenario: IAgStkObject):
         """
         Get the reward of the agent based on its state-action pair.
         """
-        return 0
+        # Get the satellite tuple
+        satellite, sensor_mg, feature_mg, date_mg = self.get_satellite(agent_id)
+
+        # Create the rewarder
+        rewarder = Rewarder()
+
+        # The reward is based on the sensor's coverage of the event zones
+        targets = []
+
+        # Append the points targets to the list
+        if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
+            now_targets = [t for t in scenario.Children.GetElements(AgESTKObjectType.eTarget)]
+            for target in now_targets:
+                targets.append(target)
+        
+        # Append the area targets to the list
+        if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
+            now_targets = [t for t in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget)]
+            for target in now_targets:
+                targets.append(target)
+
+        # Check access to Target 1 at the specific moment
+        sensor = satellite.Children.Item(f"{satellite.InstanceName}_sensor")
+
+        access_data_providers = []
+
+        # Get the access data for each target
+        for target in targets:
+            access = sensor.GetAccessToObject(target)
+            access_data_provider = access.DataProviders.Item("Access Data").Exec(scenario.StartTime, date_mg.current_date)
+            access_data_providers.append(access_data_provider)
+
+        n_obs = 0
+
+        # Iterate over the access data providers
+        for access_data_provider in access_data_providers:
+            # Check if the access is valid
+            if access_data_provider.Intervals.Count > 0:
+                n_obs += 1
+                data = 0
+
+            # CALCULATE THE REWARD BASED ON THE ACCESS DATA
+            # ---------------------------------------------
+            reward = rewarder.calculate_reward(data, satellite, sensor_mg, feature_mg, date_mg)
+
+        return reward
 
     def check_done(self, agent_id):
         """
@@ -427,7 +470,7 @@ class STKEnvironment():
         else:
             return False
     
-    def get_satellite(self, agent_id) -> tuple[AgESTKObjectType, SensorManager, FeaturesManager, DateManager]:
+    def get_satellite(self, agent_id) -> tuple[IAgStkObject, SensorManager, FeaturesManager, DateManager]:
         """
         Get the satellite based on the agent ID.
         """
