@@ -44,7 +44,7 @@ if __name__ == "__main__":
     for episode in range(5):  # Example of training loop
         data = {
             "agent_id": 0,
-            "actions": {
+            "action": {
                 "d_az": 0.5,
                 "d_el": 0.0
             },

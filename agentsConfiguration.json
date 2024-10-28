@@ -29,7 +29,7 @@
                     "initial_elevation": 80
             },
             "states_features": ["a", "e", "i", "raan", "aop", "ta", "az", "el"],
-            "actions_features": ["az", "el"]
+            "actions_features": ["d_az", "d_el"]
         }
     ]
 }

@@ -36,12 +36,14 @@ class DateManager():
     - month_to_number: returns the number of the month.
     - number_to_month: returns the month of the number.
     - number_of_days_in: returns the number of days in the month.
-    - get_date_after: returns the date after a given time increment.
+    - update_date_after: returns the date after a given time increment.
     """
-    def __init__(self, current_date):
+    def __init__(self, start_date: str, stop_date: str):
         self.class_type = "Date Manager"
-        self.current_date = current_date
-        self.current_simplified_date = self.simplify_date(current_date) # all in numbers concatenated in a string
+        self.start_date = start_date
+        self.stop_date = stop_date
+        self.current_date = start_date # in fancy stk-used format
+        self.current_simplified_date = self.simplify_date(start_date) # all in numbers concatenated in a string
 
     def simplify_date(self, date: str):
         """
@@ -99,7 +101,7 @@ class DateManager():
         else:
             raise ValueError("Month must be a valid month abbreviation.")
 
-    def get_date_after(self, delta_time):
+    def update_date_after(self, delta_time):
         """
         Return the date after the given number of days.
         """
@@ -141,7 +143,30 @@ class DateManager():
         # Store and return the new date
         self.current_simplified_date = f"{day} {month} {year} {hour} {minute} {second}"
         self.current_date = self.fancy_date(self.current_simplified_date)
-        return self.current_date
+
+    def time_ended(self) -> bool:
+        """
+        Check if the time has ended.
+        """
+        # Get the stop date
+        simplified_stop_date = self.simplify_date(self.stop_date)
+        num_stop_date = self.num_of_date(simplified_stop_date)
+
+        # Get the current date
+        num_current_date = self.num_of_date(self.current_simplified_date)
+
+        # Check if the time has ended
+        if num_current_date >= num_stop_date:
+            return True
+        else:
+            return False
+
+    def num_of_date(self, date: str) -> float:
+        """
+        Return the number of the simplified date used.
+        """
+        day, month, year, hour, minute, second = date.split(" ")
+        return float(f"{year}{month}{day}{hour}{minute}{second}")
 
 class SensorManager():
     """
@@ -165,6 +190,8 @@ class SensorManager():
         """
         if hasattr(self, name):
             return getattr(self, name)
+        else:
+            raise ValueError(f"Variable {name} does not exist in the class. Check the configuration file.")
 
     def update_azimuth(self, delta_azimuth):
         """
@@ -197,31 +224,85 @@ class SensorManager():
 class FeaturesManager():
     """
     Class to manage the features of the model. Functions:
-    - get_properties: return the properties of the agent.
-    - update_property: update the property of the agent if it exists.
+    - set_properties: return the properties of the agent.
+    - update_state: update the state properties of the agent.
+    - update_action: update the action properties of the agent.
     """
     def __init__(self, agent):
         self.class_type = "Features Manager"
-        self.get_properties(agent)
+        self.agent_config = agent
+        self.set_properties(agent)
 
-    def get_properties(self, agent):
+    def set_properties(self, agent):
+        """
+        Set the properties of the agent in the states and actions objects.
+        """
+        # Initialize the states and actions objects
+        self.state = {}
+        self.action = {}
+        self.states_features = agent["states_features"]
+        self.actions_features = agent["actions_features"]
+
+        # Iterate over the states
+        for state in self.states_features:
+            if state in agent.keys():
+                self.state[state] = agent[state]
+            else:
+                raise ValueError(f"State {state} does not exist in the agent initial state. Check the configuration file.")
+            
+        # Iterate over the actions
+        for action in self.actions_features:
+            self.action[action] = 0
+    
+    def get_state(self):
         """
         Return the properties of the agent.
         """
-        self.states = agent["states_features"]
-        self.actions = agent["actions_features"]
-
-        # Iterate over the states
-        for key in self.states:
-            if key in agent.keys():
-                setattr(self, key, agent[key])
-            else:
-                raise ValueError(f"In the configuration file, {key} appears in the states_features but not in the initial_state.")
-            
-    def update_property(self, property_name, value):
+        return self.state
+                   
+    def update_state(self, name, value):
         """
-        Update the property of the agent if it exists.
+        Update the state properties of the agent.
         """
-        if hasattr(self, property_name):
-            setattr(self, property_name, value)
+        if name in self.state.keys():
+            self.state[name] = value
+        else:
+            raise ValueError(f"Variable {name} does not exist in the class.")
+        
+    def update_action(self, name, value):
+        """
+        Update the action properties of the agent.
+        """
+        if name in self.action.keys():
+            self.action[name] = value
+        else:
+            raise ValueError(f"Variable {name} does not exist in the class.")
+        
+    def update_orbital_elements(self, orbital_elements):
+        """
+        Update the orbital elements of the agent.
+        """
+        # Update into the feature manager
+        if self.agent_config["coordinate_system"] == "Classical":
+            for key in ["a", "e", "i", "raan", "aop", "ta"]:
+                self.update_state(key, orbital_elements.DataSets.GetDataSetByName(self.long_name_of(key)).GetValues()[0])
+        elif self.agent_config["coordinate_system"] == "Cartesian":
+            for key in ["x", "y", "z", "vx", "vy", "vz"]:
+                self.update_state(key, orbital_elements.DataSets.GetDataSetByName(self.long_name_of(key)).GetValues()[0])
+        else:
+            raise ValueError("Invalid coordinate system. Please use 'Classical' or 'Cartesian'.")
+        
+    def long_name_of(self, short_name):
+        """
+        Return the long name of the short name.
+        """
+        short_to_long = {"a": "Semi-major Axis", "e": "Eccentricity", "i": "Inclination", "raan": "RAAN", "aop": "Arg of Perigee", "ta": "True Anomaly"}
+        return short_to_long[short_name]
+    
+    def short_name_of(self, long_name):
+        """
+        Return the short name of the long name.
+        """
+        long_to_short = {"Semi-major Axis": "a", "Eccentricity": "e", "Inclination": "i", "RAAN": "raan", "Arg of Perigee": "aop", "True Anomaly": "ta"}
+        return long_to_short[long_name]
 

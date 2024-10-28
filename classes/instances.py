@@ -55,11 +55,11 @@ class Gym():
         # Initialize the agent with the configuration in a simplified dictionary
         self.stk_env = STKEnvironment(DataFromJSON(agents_config, "configuration").get_dict(), self.evpt_file_path)
     
-    def get_next_state_and_reward(self, agent_id, actions, delta_time):
+    def get_next_state_and_reward(self, agent_id, action, delta_time):
         """
         Return the next state and reward of the agent.
         """
-        return self.stk_env.step(agent_id, actions, delta_time)
+        return self.stk_env.step(agent_id, action, delta_time)
     
     def generate_gif(self):
         """
@@ -80,7 +80,7 @@ class Gym():
 
         # Handle the request based on the command
         if request_data["command"] == "get_next":
-            state, reward, done = self.get_next_state_and_reward(request_data["agent_id"], request_data["actions"], request_data["delta_time"])
+            state, reward, done = self.get_next_state_and_reward(request_data["agent_id"], request_data["action"], request_data["delta_time"])
             return json.dumps({"state": state, "reward": reward, "done": done})
         elif request_data["command"] == "shutdown":
             self.generate_gif()
@@ -131,9 +131,9 @@ class STKEnvironment():
         # Build the satellites by iterating over the agents
         for i, agent in enumerate(self.agents_config["agents"]):
             agent = DataFromJSON(agent, "agent").get_dict()
-            satellite, sensor_manager, features_manager = self.build_satellite(agent, self.scenario, i)
-            date_manager = DateManager(agents_config["start_time"])
-            self.satellites_tuples.append((satellite, sensor_manager, features_manager, date_manager)) # append the satellite, its sensor manager and its date manager
+            satellite, sensor_mg, features_mg = self.build_satellite(agent, self.scenario, i)
+            date_mg = DateManager(agents_config["start_time"], agents_config["stop_time"])
+            self.satellites_tuples.append((satellite, sensor_mg, features_mg, date_mg)) # append the satellite, its sensor manager and its date manager
 
         # Add the zones of interest
         self.draw_event_zones(evpt_file_path, self.stk_root, self.scenario)
@@ -192,12 +192,12 @@ class STKEnvironment():
         sensor.CommonTasks.SetPointingFixedAzEl(az, el, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
         
         # Create the sensor manager
-        sensor_manager = SensorManager(agent, sensor)
+        sensor_mg = SensorManager(agent, sensor)
 
         # Create the features manager
-        features_manager = FeaturesManager(agent)
+        features_mg = FeaturesManager(agent)
 
-        return satellite, sensor_manager, features_manager
+        return satellite, sensor_mg, features_mg
         
     def set_propagator_type(self, satellite):
         """
@@ -213,7 +213,7 @@ class STKEnvironment():
         else:
             raise ValueError("Invalid propagator type. Please use 'HPOP' or 'J2Perturbation'.")
         
-    def get_reference_frame(self, agent):
+    def get_reference_frame_obj(self, agent):
         """
         Get the reference frame of the agent depending on configuration.
         """
@@ -225,6 +225,24 @@ class STKEnvironment():
         else:
             raise ValueError("Invalid reference frame. Please use 'ICRF' or 'Fixed'.")
         
+    def get_reference_frame_str(self, agent):
+        """
+        Get the reference frame of the agent depending on configuration.
+        """
+        return agent["reference_frame"]
+    
+    def get_coordinate_system(self, agent):
+        """
+        Get the coordinate system of the agent depending on configuration.
+        """
+        # Determine which of the coordinate systems
+        if agent["coordinate_system"] == "Classical":
+            return "Classical Elements"
+        elif agent["coordinate_system"] == "Cartesian":
+            return "Cartesian"
+        else:
+            raise ValueError("Invalid coordinate system. Please use 'Classical' or 'Cartesian'.")
+        
     def set_prop_initial_state(self, prop, agent):
         """
         Set the initial state of the satellite based on the agent configuration.
@@ -234,10 +252,10 @@ class STKEnvironment():
         # Set the initial state depending on the coordinate system
         if agent["coordinate_system"] == "Classical":
             a, e, i, raan, aop, ta = [agent[key] for key in ["a", "e", "i", "raan", "aop", "ta"]]
-            prop.InitialState.Representation.AssignClassical(self.get_reference_frame(agent), a, e, i, raan, aop, ta)
+            prop.InitialState.Representation.AssignClassical(self.get_reference_frame_obj(agent), a, e, i, raan, aop, ta)
         elif agent["coordinate_system"] == "Cartesian":
             x, y, z, vx, vy, vz = [agent[key] for key in ["x", "y", "z", "vx", "vy", "vz"]]
-            prop.InitialState.Representation.AssignCartesian(self.get_reference_frame(agent), x, y, z, vx, vy, vz)
+            prop.InitialState.Representation.AssignCartesian(self.get_reference_frame_obj(agent), x, y, z, vx, vy, vz)
         else:
             raise ValueError("Invalid coordinate system. Please use 'Classical' or 'Cartesian'.")
         
@@ -321,12 +339,12 @@ class STKEnvironment():
 
         target.AutoCentroid = True
         
-    def step(self, agent_id, actions, delta_time):
+    def step(self, agent_id, action, delta_time):
         """
         Forward method. Return the next state and reward based on the current state and action taken.
         """
         # Update the agent's features
-        self.update_agent(agent_id, actions, delta_time)
+        self.update_agent(agent_id, action, delta_time)
 
         # Get the next state
         state = self.get_state(agent_id)
@@ -337,68 +355,79 @@ class STKEnvironment():
         # Check if the episode is done
         done = self.check_done(agent_id)
 
-        # Get the satellite to forward
-        satellite, sensor_manager, feature_manager, date_manager = self.get_satellite(agent_id)
-        date_manager.current_date = date_manager.get_date_after(delta_time)
-
-        # Specify the exact time based on the current date of the manager
-        specific_time = date_manager.current_date
-
-        # Get the satellite's classical orbital elements at the specific time
-        orbital_elements = satellite.DataProviders.Item("Classical Elements").Group.Item("ICRF").ExecSingle(specific_time)
-
-        # Extract and display the orbital elements
-        n_obs = len(orbital_elements.DataSets.GetDataSetByName("Time").GetValues())
-        time = orbital_elements.DataSets.GetDataSetByName("Time").GetValues()[0]
-        semi_major_axis = orbital_elements.DataSets.GetDataSetByName("Semi-major Axis").GetValues()[0]
-        eccentricity = orbital_elements.DataSets.GetDataSetByName("Eccentricity").GetValues()[0]
-        inclination = orbital_elements.DataSets.GetDataSetByName("Inclination").GetValues()[0]
-        raan = orbital_elements.DataSets.GetDataSetByName("RAAN").GetValues()[0]
-        arg_of_perigee = orbital_elements.DataSets.GetDataSetByName("Arg of Perigee").GetValues()[0]
-        true_anomaly = orbital_elements.DataSets.GetDataSetByName("True Anomaly").GetValues()[0]
-
-        # Assign values to the state, reward, and done variables
-        state = [semi_major_axis, eccentricity, inclination, raan, arg_of_perigee, true_anomaly]
-        reward = 0
-        done = False
-
         ### CONTINUE ###
 
         return state, reward, done
     
-    def update_agent(self, agent_id, actions, delta_time):
+    def update_agent(self, agent_id, action, delta_time):
         """
         Class to update the agent's features based on the action taken and the time passed.
         """
-        # Get the satellite to forward
-        _, sensor_manager, feature_manager, date_manager = self.get_satellite(agent_id)
-        date_manager.current_date = date_manager.get_date_after(delta_time)
+        # Get the satellite tuple
+        satellite, sensor_mg, feature_mg, date_mg = self.get_satellite(agent_id)
 
         # Iterate over all actions taken
-        for key in actions.keys():
+        for key in action.keys():
+            # Update the actions in the features manager
+            feature_mg.update_action(key, action[key])
+
+            # Perform sensor changes
             if key == "d_az":
-                sensor_manager.update_azimuth(actions[key])
+                sensor_mg.update_azimuth(action[key])
             elif key == "d_el":
-                sensor_manager.update_elevation(actions[key])
+                sensor_mg.update_elevation(action[key])
             else:
                 raise ValueError("Invalid action. Please use 'd_az' or 'd_el'.")
             
-        az = sensor_manager.get_item("current_azimuth")
-        feature_manager.update_property("az", az)
-        el = sensor_manager.get_item("current_elevation")
-        feature_manager.update_property("el", el)
-        sensor_manager.sensor.CommonTasks.SetPointingFixedAzEl(az, el, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
+        az = sensor_mg.get_item("current_azimuth")
+        el = sensor_mg.get_item("current_elevation")
+        sensor_mg.sensor.CommonTasks.SetPointingFixedAzEl(az, el, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
+
+        # Update the features manager sensor data
+        for var in ["az", "el"]:
+            feature_mg.update_state(var, locals()[var])
+
+        # Update the date manager
+        date_mg.update_date_after(delta_time)
+
+        # Find the orbital elements and update the features manager
+        orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, feature_mg.agent_config)
+        feature_mg.update_orbital_elements(orbital_elements)
+
+        # HERE TO PUT ADDITIONAL FEATURES IF THEY EXIST IN THE FEATURE MANAGER
 
     def get_state(self, agent_id):
-        pass
+        """
+        Get the state of the agent based on the current features.
+        """
+        # Get the satellite tuple
+        _, _, feature_mg, _ = self.get_satellite(agent_id)
+
+        # Get the features of the agent
+        state = feature_mg.get_state()
+
+        return [value for value in state.values()]
 
     def get_reward(self, agent_id):
-        pass
+        """
+        Get the reward of the agent based on its state-action pair.
+        """
+        return 0
 
     def check_done(self, agent_id):
-        pass
+        """
+        Check if the episode is done based on the current date.
+        """
+        # Get the satellite tuple
+        _, _, _, date_mg = self.get_satellite(agent_id)
+
+        # Check if the simulation time ended
+        if date_mg.time_ended():
+            return True
+        else:
+            return False
     
-    def get_satellite(self, agent_id):
+    def get_satellite(self, agent_id) -> tuple[AgESTKObjectType, SensorManager, FeaturesManager, DateManager]:
         """
         Get the satellite based on the agent ID.
         """
@@ -415,3 +444,9 @@ class STKEnvironment():
             raise ValueError("Invalid agent ID. Please use a string or an integer.")
         
         raise ValueError(f"Satellite with ID {agent_id} not found.")
+    
+    def get_orbital_elements(self, satellite, specific_time, agent):
+        """
+        Get the orbital elements of the satellite at a specific time.
+        """
+        return satellite.DataProviders.Item(self.get_coordinate_system(agent)).Group.Item(self.get_reference_frame_str(agent)).ExecSingle(specific_time)
