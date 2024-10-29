@@ -8,26 +8,39 @@
             "name": "Gym",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/main.py",
+            "program": "${workspaceFolder}\\main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "python": "C:/Users/gerardmr/.conda/envs/earth-gym/python",
+            "python": "C:\\Users\\gerardmr\\.conda\\envs\\earth-gym\\python",
             "args": [
                 "--host", "localhost",
                 "--port", "5555",
-                "--conf", "${workspaceFolder}/agentsConfiguration.json",
-                "--evpt", "${workspaceFolder}/eventZones.csv",
-                "--out", "${workspaceFolder}/output"
+                "--conf", "${workspaceFolder}\\agentsConfiguration.json",
+                "--evpt", "${workspaceFolder}\\eventZones.csv",
+                "--out", "${workspaceFolder}\\output"
             ]
         },
         {
-            "name": "Agent",
+            "name": "Dummy Agent",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/dummy_agent.py",
+            "program": "${workspaceFolder}\\dummy_agent.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "python": "C:/Users/gerardmr/.conda/envs/myenv/python",
+            "python": "C:\\Users\\gerardmr\\.conda\\envs\\myenv\\python",
+            "args": [
+                "--host", "localhost",
+                "--port", "5555"
+            ]
+        },
+        {
+            "name": "SAC",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\sac\\main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "python": "C:\\Users\\gerardmr\\.conda\\envs\\sac\\python",
             "args": [
                 "--host", "localhost",
                 "--port", "5555"
@@ -36,8 +49,8 @@
     ],
     "compounds": [
         {
-            "name": "Train",
-            "configurations": ["Gym", "Agent"]
+            "name": "Train Dummy",
+            "configurations": ["Gym", "Dummy Agent"]
         }
     ]
 }

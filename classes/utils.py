@@ -308,7 +308,7 @@ class FeaturesManager():
 class Rewarder():
     """
     Class to manage the reward of the model. Functions:
-    - reward_agent: return the reward of the state-action pair.
+    - calculate_reward: return the reward of the state-action pair.
     """
     def __init__(self):
         self.class_type = "Rewarder"

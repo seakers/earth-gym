@@ -1,6 +1,7 @@
 import json
 import socket
 import pandas as pd
+from datetime import datetime
 
 from agi.stk12.stkengine import STKEngine
 from agi.stk12.stkobjects import *
@@ -277,8 +278,8 @@ class STKEnvironment():
         # Create the events zones
         event_zones = pd.read_csv(file_path)
 
-        # Trim the data to 1000 sampled zones
-        zones = event_zones.sample(300, ignore_index=True)
+        # Trim the data to X sampled zones
+        zones = event_zones.sample(100, ignore_index=True)
 
         # Define specific objects or grid zones to check for coverage
         for i in range(zones.shape[0]):
@@ -416,31 +417,23 @@ class STKEnvironment():
         # Create the rewarder
         rewarder = Rewarder()
 
-        # The reward is based on the sensor's coverage of the event zones
-        targets = []
-
-        # Append the points targets to the list
-        if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
-            now_targets = [t for t in scenario.Children.GetElements(AgESTKObjectType.eTarget)]
-            for target in now_targets:
-                targets.append(target)
-        
-        # Append the area targets to the list
-        if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
-            now_targets = [t for t in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget)]
-            for target in now_targets:
-                targets.append(target)
-
-        # Check access to Target 1 at the specific moment
+        # Create the access data providers
+        access_data_providers = []
         sensor = satellite.Children.Item(f"{satellite.InstanceName}_sensor")
 
-        access_data_providers = []
+        # Iterate over all point targets
+        if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
+            for target in scenario.Children.GetElements(AgESTKObjectType.eTarget):
+                access = sensor.GetAccessToObject(target)
+                access_data_provider = access.DataProviders.Item("Access Data").Exec(scenario.StartTime, date_mg.current_date)
+                access_data_providers.append(access_data_provider)
 
-        # Get the access data for each target
-        for target in targets:
-            access = sensor.GetAccessToObject(target)
-            access_data_provider = access.DataProviders.Item("Access Data").Exec(scenario.StartTime, date_mg.current_date)
-            access_data_providers.append(access_data_provider)
+        # Iterate over all area targets
+        if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
+            for target in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget):
+                access = sensor.GetAccessToObject(target)
+                access_data_provider = access.DataProviders.Item("Access Data").Exec(scenario.StartTime, date_mg.current_date)
+                access_data_providers.append(access_data_provider)
 
         # Call the rewarder to calculate the reward
         reward = rewarder.calculate_reward(access_data_providers, satellite, sensor_mg, feature_mg, date_mg)
