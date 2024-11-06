@@ -49,8 +49,12 @@
     ],
     "compounds": [
         {
-            "name": "Train Dummy",
+            "name": "Train Example",
             "configurations": ["Gym", "Example"]
+        },
+        {
+            "name": "Train SAC",
+            "configurations": ["Gym", "SAC"]
         }
     ]
 }

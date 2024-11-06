@@ -164,8 +164,9 @@ class DateManager():
         """
         Return the number of the simplified date used.
         """
-        day, month, year, hour, minute, second = date.split(" ")
-        return float(f"{year}{month}{day}{hour}{minute}{second}")
+        day, month, year, hour, minute, _ = [int(float(i)) for i in date.split(" ")]
+        _, _, _, _, _, second = [float(i) for i in date.split(" ")]
+        return float(f"{year:04}{month:02}{day:02}{hour:02}{minute:02}{second:08.5f}")
 
 class SensorManager():
     """

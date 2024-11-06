@@ -15,7 +15,6 @@ class Gym():
     """
     def __init__(self, args):
         self.initialize_args(args)
-        self.initialize_agent(self.conf_file_path)
         self.running = True
 
     def initialize_args(self, args):
@@ -98,10 +97,13 @@ class Gym():
         server_socket.bind((host, port))
         server_socket.listen(1)
         print("Gym environment started. Waiting for connections...")
-        
+
         # Accept the connection
         conn, addr = server_socket.accept()
         print(f"Connected to: {addr}")
+
+        # Initialize the agent before starting the loop
+        self.initialize_agent(self.conf_file_path)
         
         # Loop to handle the requests
         while self.running:
@@ -345,16 +347,18 @@ class STKEnvironment():
         Forward method. Return the next state and reward based on the current state and action taken.
         """
         # Update the agent's features
-        self.update_agent(agent_id, action, delta_time)
+        done = self.update_agent(agent_id, action, delta_time)
+
+        # Return None if the episode is done
+        if done:
+            print(f"Episode for agent {agent_id} is done.")
+            return None, None, done
 
         # Get the next state
         state = self.get_state(agent_id)
 
         # Get the reward
         reward = self.get_reward(agent_id, self.scenario)
-
-        # Check if the episode is done
-        done = self.check_done(agent_id)
 
         return state, reward, done
     
@@ -389,11 +393,17 @@ class STKEnvironment():
         # Update the date manager
         date_mg.update_date_after(delta_time)
 
-        # Find the orbital elements and update the features manager
-        orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, feature_mg.agent_config)
-        feature_mg.update_orbital_elements(orbital_elements)
+        # Check if the episode is done
+        done = self.check_done(agent_id)
 
-        # HERE TO PUT ADDITIONAL FEATURES IF THEY EXIST IN THE FEATURE MANAGER
+        # Return True if the episode is done
+        if done:
+            return True
+        else:
+            # Find the orbital elements and update the features manager
+            orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, feature_mg.agent_config)
+            feature_mg.update_orbital_elements(orbital_elements)
+            return False
 
     def get_state(self, agent_id):
         """
