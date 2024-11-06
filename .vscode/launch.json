@@ -21,10 +21,10 @@
             ]
         },
         {
-            "name": "Dummy Agent",
+            "name": "Example",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}\\dummy_agent.py",
+            "program": "${workspaceFolder}\\.info\\example_agent.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "python": "C:\\Users\\gerardmr\\.conda\\envs\\myenv\\python",
@@ -50,7 +50,7 @@
     "compounds": [
         {
             "name": "Train Dummy",
-            "configurations": ["Gym", "Dummy Agent"]
+            "configurations": ["Gym", "Example"]
         }
     ]
 }
