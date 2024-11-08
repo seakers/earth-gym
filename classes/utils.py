@@ -155,7 +155,7 @@ class DateManager():
         num_current_date = self.num_of_date(self.current_simplified_date)
 
         # Check if the time has ended
-        if num_current_date >= num_stop_date:
+        if num_current_date > num_stop_date:
             return True
         else:
             return False
@@ -313,12 +313,13 @@ class Rewarder():
     """
     def __init__(self):
         self.class_type = "Rewarder"
-        self.reward = 0
 
     def calculate_reward(self, access_data_providers, satellite, sensor_mg, feature_mg, date_mg):
         """
         Return the reward of the state-action pair.
         """
+        reward = 0
+
         # Initiate number of observations
         n_obs = 0
 
@@ -327,5 +328,14 @@ class Rewarder():
             # Check if the access is valid
             if access_data_provider.Intervals.Count > 0:
                 n_obs += 1
+                reward += self.f_ri(n_obs , n_obs, n_obs)
 
-        return self.reward
+        return reward
+    
+    def f_ri(self, event_pos: tuple[float, float], satellite_pos: tuple[float, float], alt: float):
+        """
+        Function rewarding a certain observation.
+        """
+        reward = 0
+
+        return reward
