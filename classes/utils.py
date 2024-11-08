@@ -327,15 +327,54 @@ class Rewarder():
         for access_data_provider in access_data_providers:
             # Check if the access is valid
             if access_data_provider.Intervals.Count > 0:
-                n_obs += 1
-                reward += self.f_ri(n_obs , n_obs, n_obs)
+                print("Observation was made.")
+                for i in range(access_data_provider.Intervals.Count):
 
-        return reward
+
+                    # TODO: Get the values of the access data provider
+
+
+                    start_time = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("Start Time").GetValues()
+                    stop_time = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("Stop Time").GetValues()
+                    from_start_lat = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Start Lat").GetValues()
+                    from_start_lon = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Start Lon").GetValues()
+                    from_start_alt = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Start Alt").GetValues()
+                    from_stop_lat = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Stop Lat").GetValues()
+                    from_stop_lon = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Stop Lon").GetValues()
+                    from_stop_alt = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Stop Alt").GetValues()
+                    to_start_lat = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Start Lat").GetValues()
+                    to_start_lon = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Start Lon").GetValues()
+                    to_start_alt = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Start Alt").GetValues()
+                    to_stop_lat = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Stop Lat").GetValues()
+                    to_stop_lon = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Stop Lon").GetValues()
+                    to_stop_alt = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Stop Alt").GetValues()
+                    print(f"Access interval {i + 1}: from {start_time} to {stop_time}")
+                    print(f"From start: Latitude: {from_start_lat} Longitude: {from_start_lon} Altitude: {from_start_alt}")
+                    print(f"From stop: Latitude: {from_stop_lat} Longitude: {from_stop_lon} Altitude: {from_stop_alt}")
+                    print(f"To start: Latitude: {to_start_lat} Longitude: {to_start_lon} Altitude: {to_start_alt}")
+                    print(f"To stop: Latitude: {to_stop_lat} Longitude: {to_stop_lon} Altitude: {to_stop_alt}")
+
+                    reward += self.f_ri((to_start_lat, to_start_lon, to_start_alt), (from_start_lat, from_start_lon, from_start_alt))
     
-    def f_ri(self, event_pos: tuple[float, float], satellite_pos: tuple[float, float], alt: float):
+    def f_ri(self, event_pos: tuple[float, float, float], satellite_pos: tuple[float, float, float]):
         """
         Function rewarding a certain observation.
         """
-        reward = 0
+        # Get the event positions
+        ev_lat = event_pos[0]
+        ev_lon = event_pos[1]
+        ev_alt = event_pos[2]
 
-        return reward
+        # Get the satellite positions
+        sat_lat = satellite_pos[0]
+        sat_lon = satellite_pos[1]
+        sat_alt = satellite_pos[2]
+
+        profit = 1
+        reward_i = 0
+
+
+        # TODO: Finish the reward function
+
+
+        return reward_i
