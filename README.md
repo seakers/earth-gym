@@ -1,5 +1,5 @@
 # earthGym
-Gym for RL-trained satellites
+Gym for RL-trained satellite agents' models.
 
 ## Requirements
 Simple steps to run the code.
