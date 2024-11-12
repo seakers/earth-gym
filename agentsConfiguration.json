@@ -5,6 +5,11 @@
         "stop_time": "1 Jan 2024 00:30:00.000",
         "propagator": "HPOP"
     },
+    "reward_metrics": {
+        "min_duration": 0.5,
+        "reobs_decay": 2,
+        "zenith_weight": 1
+    },
     "agents": [
         {
             "position": {
@@ -23,7 +28,7 @@
             },
             "sensor": {
                     "pattern": "Simple Conic",
-                    "cone_angle": 30,
+                    "cone_angle": 60,
                     "resolution": 0.1,
                     "initial_azimuth": 90,
                     "initial_elevation": 80

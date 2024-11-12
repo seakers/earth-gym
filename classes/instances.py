@@ -130,6 +130,7 @@ class STKEnvironment():
         self.scenario = self.build_scenario(self.stk_root, self.agents_config)
         self.satellites_tuples = []
         self.current_dates = []
+        self.rewarder = Rewarder(agents_config)
 
         # Build the satellites by iterating over the agents
         for i, agent in enumerate(agents_config["agents"]):
@@ -357,8 +358,12 @@ class STKEnvironment():
         # Get the next state
         state = self.get_state(agent_id)
 
+        # If zero delta time, return only the state and do not enter the reward calculation
+        if delta_time == 0.0:
+            return state, None, None
+
         # Get the reward
-        reward = self.get_reward(agent_id, self.scenario)
+        reward = self.get_reward(agent_id, self.scenario, delta_time)
 
         return state, reward, done
     
@@ -417,36 +422,38 @@ class STKEnvironment():
 
         return [value for value in state.values()]
 
-    def get_reward(self, agent_id, scenario: IAgStkObject):
+    def get_reward(self, agent_id, scenario: IAgStkObject, delta_time: float) -> float:
         """
         Get the reward of the agent based on its state-action pair.
         """
         # Get the satellite tuple
-        satellite, sensor_mg, feature_mg, date_mg = self.get_satellite(agent_id)
+        satellite, _, _, date_mg = self.get_satellite(agent_id)
 
         # Create the rewarder
-        rewarder = Rewarder()
+        rewarder = self.rewarder
 
         # Create the access data providers
-        access_data_providers = []
+        data_providers = []
         sensor = satellite.Children.Item(f"{satellite.InstanceName}_sensor")
 
         # Iterate over all point targets
         if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
             for target in scenario.Children.GetElements(AgESTKObjectType.eTarget):
                 access = sensor.GetAccessToObject(target)
-                access_data_provider = access.DataProviders.Item("Access Data").Exec(scenario.StartTime, date_mg.current_date)
-                access_data_providers.append(access_data_provider)
+                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, date_mg.current_date)
+                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, date_mg.current_date, delta_time/100)
+                data_providers.append((access_data_provider, aer_data_provider))
 
         # Iterate over all area targets
         if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
             for target in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget):
                 access = sensor.GetAccessToObject(target)
-                access_data_provider = access.DataProviders.Item("Access Data").Exec(scenario.StartTime, date_mg.current_date)
-                access_data_providers.append(access_data_provider)
+                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, date_mg.current_date)
+                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, date_mg.current_date, delta_time/100)
+                data_providers.append((access_data_provider, aer_data_provider))
 
         # Call the rewarder to calculate the reward
-        reward = rewarder.calculate_reward(access_data_providers, satellite, sensor_mg, feature_mg, date_mg)
+        reward = rewarder.calculate_reward(data_providers, date_mg)
 
         return reward
 

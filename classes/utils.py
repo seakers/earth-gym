@@ -1,3 +1,5 @@
+import math
+
 class DataFromJSON():
     """
     Class to manage the data of the model. Functions:
@@ -42,7 +44,9 @@ class DateManager():
         self.start_date = start_date
         self.stop_date = stop_date
         self.current_date = start_date # in fancy stk-used format
+        self.last_date = start_date
         self.current_simplified_date = self.simplify_date(start_date) # all in numbers concatenated in a string
+        self.last_simplified_date = self.current_simplified_date
 
     def simplify_date(self, date: str):
         """
@@ -104,6 +108,10 @@ class DateManager():
         """
         Return the date after the given number of days.
         """
+        # Store the last date
+        self.last_date = self.current_date
+        self.last_simplified_date = self.current_simplified_date
+
         # Get the current date
         day, month, year, hour, minute, second = self.current_simplified_date.split(" ")
         day = int(day)
@@ -310,71 +318,85 @@ class Rewarder():
     """
     Class to manage the reward of the model. Functions:
     - calculate_reward: return the reward of the state-action pair.
+    - f_ri: return the reward of the observation.
+    - f_theta: return the reward of the angle between the event and the satellite.
+    - f_reobs: return the reward of the reobservation of the same event.
     """
-    def __init__(self):
+    def __init__(self, agents_config):
         self.class_type = "Rewarder"
+        self.seen_events = []
+        self.agents_config = agents_config
 
-    def calculate_reward(self, access_data_providers, satellite, sensor_mg, feature_mg, date_mg):
+    def calculate_reward(self, data_providers, date_mg : DateManager):
         """
-        Return the reward of the state-action pair.
+        Return the reward of the state-action pair given the proper data providers (acces and aer).
         """
         reward = 0
 
-        # Initiate number of observations
-        n_obs = 0
-
         # Iterate over the access data providers
-        for access_data_provider in access_data_providers:
+        for access_data_provider, aer_data_provider in data_providers:
             # Check if the access is valid
             if access_data_provider.Intervals.Count > 0:
-                print("Observation was made.")
                 for i in range(access_data_provider.Intervals.Count):
-
-
-                    # TODO: Get the values of the access data provider
-
-
+                    # Information from the access data provider
                     start_time = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("Start Time").GetValues()
                     stop_time = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("Stop Time").GetValues()
-                    from_start_lat = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Start Lat").GetValues()
-                    from_start_lon = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Start Lon").GetValues()
-                    from_start_alt = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Start Alt").GetValues()
-                    from_stop_lat = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Stop Lat").GetValues()
-                    from_stop_lon = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Stop Lon").GetValues()
-                    from_stop_alt = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("From Stop Alt").GetValues()
-                    to_start_lat = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Start Lat").GetValues()
-                    to_start_lon = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Start Lon").GetValues()
-                    to_start_alt = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Start Alt").GetValues()
-                    to_stop_lat = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Stop Lat").GetValues()
-                    to_stop_lon = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Stop Lon").GetValues()
-                    to_stop_alt = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Stop Alt").GetValues()
-                    print(f"Access interval {i + 1}: from {start_time} to {stop_time}")
-                    print(f"From start: Latitude: {from_start_lat} Longitude: {from_start_lon} Altitude: {from_start_alt}")
-                    print(f"From stop: Latitude: {from_stop_lat} Longitude: {from_stop_lon} Altitude: {from_stop_alt}")
-                    print(f"To start: Latitude: {to_start_lat} Longitude: {to_start_lon} Altitude: {to_start_alt}")
-                    print(f"To stop: Latitude: {to_stop_lat} Longitude: {to_stop_lon} Altitude: {to_stop_alt}")
+                    to_object = access_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("To Object").GetValues()
 
-                    reward += self.f_ri((to_start_lat, to_start_lon, to_start_alt), (from_start_lat, from_start_lon, from_start_alt))
+                    # Information from the aer data provider
+                    zen_angles = aer_data_provider.Intervals.Item(i).DataSets.GetDataSetByName("Elevation").GetValues()
+
+                    # Iterate over the unlike case of the target being accessed multiple times in the step
+                    for j in range(len(start_time)):
+                        # Get the event name by eliminating the "To Target" string from STK output
+                        event_name = to_object[j].replace("To Target", "").strip()
+
+                        # Find the maximum (best) angle of elevation
+                        max_zen_angle = max([abs(el) for el in zen_angles])
+
+                        # Minimum event duration
+                        min_duration = self.agents_config["min_duration"] # it does not really make sense if it is more than 60 seconds, but it is usually in the order of 1 second
+
+                        # Check if the event is strictly after the last date (filter previously observed) and be it larger than a certain duration
+                        if date_mg.num_of_date(date_mg.last_simplified_date) < date_mg.num_of_date(date_mg.simplify_date(start_time[j])) and (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:
+                            ri = self.f_ri(event_name, max_zen_angle)
+                            reward += ri
+                            print(f"Event {event_name} observed with a zenith angle of {max_zen_angle} and got a reward of {ri}, adding to the total of {reward}.")
+        
+        return reward
     
-    def f_ri(self, event_pos: tuple[float, float, float], satellite_pos: tuple[float, float, float]):
+    def f_ri(self, event_name: int, max_zen_angle: float):
         """
-        Function rewarding a certain observation.
+        Function rewarding a certain observation. Inputs given in the form of tuples.
+        - event_pos: tuple of the event position (latitude, longitude, altitude).
+        - satellite_pos: tuple of the satellite position (latitude, longitude, altitude).
+        - event_name: name of the event target ('target1', for instance).
+        - max_zen_angle: maximum elevation angle of the event.
         """
-        # Get the event positions
-        ev_lat = event_pos[0]
-        ev_lon = event_pos[1]
-        ev_alt = event_pos[2]
-
-        # Get the satellite positions
-        sat_lat = satellite_pos[0]
-        sat_lon = satellite_pos[1]
-        sat_alt = satellite_pos[2]
-
         profit = 1
-        reward_i = 0
+        n_obs = 0
 
+        # Check if the event has been seen before and how many times
+        for seen in self.seen_events:
+            if seen[0] == event_name:
+                n_obs = seen[1]
+                seen[1] += 1
 
-        # TODO: Finish the reward function
+        f_theta = self.f_theta(max_zen_angle)
+        f_reobs = self.f_reobs(n_obs)
 
+        return profit * f_reobs * f_theta
 
-        return reward_i
+    def f_theta(self, max_zen_angle: float):
+        """
+        Function rewarding the angle between the event and the satellite. Inputs given in the form of a list.
+        - el_angles: list of elevation angles.
+        """
+        return self.agents_config["zenith_weight"] * math.sin(math.radians(max_zen_angle)) # the higher the better, the angle is in degrees
+    
+    def f_reobs(self, n_obs: int):
+        """
+        Function rewarding the reobservation of the same event. Inputs given in the form of an integer.
+        - n_obs: number of times the event has been observed.
+        """
+        return (1 / n_obs**self.agents_config["reobs_decay"]) if n_obs > 0 else 1
