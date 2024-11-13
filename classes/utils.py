@@ -501,7 +501,7 @@ class Plotter():
         # Save the plot
         if not os.path.exists(self.out_folder_path):
             os.makedirs(self.out_folder_path)
-        plt.savefig(f"{self.out_folder_path}\\rewards.png")
+        plt.savefig(f"{self.out_folder_path}\\rewards.png", dpi=500)
     
     def plot_rewards_smoothed(self, window_size: int=10):
         """
@@ -513,7 +513,7 @@ class Plotter():
         # Clear the plot
         plt.clf()
         
-        # Smoothed with pandas
+        # Smoothed
         smoothed_rewards = self.rewards.rolling(window=window_size).mean()
 
         # Plot
@@ -525,7 +525,7 @@ class Plotter():
         # Save the plot
         if not os.path.exists(self.out_folder_path):
             os.makedirs(self.out_folder_path)
-        plt.savefig(f"{self.out_folder_path}\\rewards_smoothed.png")
+        plt.savefig(f"{self.out_folder_path}\\rewards_smoothed.png", dpi=500)
 
     def plot_cumulative_rewards(self):
         """
@@ -537,6 +537,7 @@ class Plotter():
         # Clear the plot
         plt.clf()
         
+        # Cumulative sum
         cumulative_rewards = self.rewards.cumsum()
 
         # Plot
@@ -548,7 +549,7 @@ class Plotter():
         # Save the plot
         if not os.path.exists(self.out_folder_path):
             os.makedirs(self.out_folder_path)
-        plt.savefig(f"{self.out_folder_path}\\cumulative_rewards.png")
+        plt.savefig(f"{self.out_folder_path}\\cumulative_rewards.png", dpi=500)
 
     def plot_cumulative_rewards_smoothed_per_steps(self, window_size: int=10):
         """
@@ -560,7 +561,7 @@ class Plotter():
         # Clear the plot
         plt.clf()
         
-        # Smoothed with pandas
+        # Smoothed  and cumulative sum divided by the step
         smoothed_rewards = self.rewards.rolling(window=window_size).mean()
         cumulative_rewards = smoothed_rewards.cumsum()
         cumulative_rewards = cumulative_rewards.div(pd.Series(range(1, len(cumulative_rewards))), axis=0)
@@ -574,7 +575,7 @@ class Plotter():
         # Save the plot
         if not os.path.exists(self.out_folder_path):
             os.makedirs(self.out_folder_path)
-        plt.savefig(f"{self.out_folder_path}\\cumulative_rewards_smoothed_per_steps.png")
+        plt.savefig(f"{self.out_folder_path}\\cumulative_rewards_smoothed_per_steps.png", dpi=500)
 
     def plot_all(self, window_size: int=10):
         """
