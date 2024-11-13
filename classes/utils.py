@@ -388,7 +388,10 @@ class Rewarder():
 
                         # Find the maximum (best) angle of elevation
                         max_zen_angle = max([abs(el) for el in zen_angles])
-                        print(zen_angles, max_zen_angle)
+
+                        # Prints
+                        print(f"\nEvent: {event_name}")
+                        print(f"Seen from {start_time[j]} to {stop_time[j]}.")
                         print("Date difference in start", -date_mg.num_of_date(date_mg.last_simplified_date) + date_mg.num_of_date(date_mg.simplify_date(start_time[j])))
                         print("Date difference in stop", -date_mg.num_of_date(date_mg.simplify_date(start_time[j])) + date_mg.num_of_date(date_mg.simplify_date(stop_time[j])))
 
@@ -403,21 +406,22 @@ class Rewarder():
                             for i, seen in enumerate(self.seen_events):
                                 if seen[0] == event_name:
                                     # The event has been seen before
+                                    last_seen = date_mg.num_of_date(date_mg.simplify_date(seen[2])) # need this line to avoid pointer to tuple
                                     reward_was_seen = True
+                                    self.seen_events[i][2] = stop_time[j]
 
                                     # This filters concatenated observations (which indeed are one observation)
-                                    if (date_mg.num_of_date(date_mg.simplify_date(seen[2])) > date_mg.num_of_date(date_mg.simplify_date(start_time[j]))):
+                                    if (last_seen - min_duration) >= date_mg.num_of_date(date_mg.simplify_date(start_time[j])): # min_duration added because of added in .Exec() too
                                         break
 
-                                    # Update seen events property
+                                    # Event is seen again
                                     self.seen_events[i][1] += 1
-                                    self.seen_events[i][2] = stop_time[j]
 
                                     # Reward the observation
                                     n_obs = self.seen_events[i][1]
                                     ri = self.f_ri(max_zen_angle, n_obs)
                                     reward += ri
-                                    print(f"\nObserved {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+                                    print(f"Observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
                                     break
                             
                             # If the event has not been seen before
@@ -427,7 +431,7 @@ class Rewarder():
                                 # Reward the observation
                                 ri = self.f_ri(max_zen_angle, 1)
                                 reward += ri
-                                print(f"\nFirst observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+                                print(f"First observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
         
         return reward
     
