@@ -436,20 +436,23 @@ class STKEnvironment():
         data_providers = []
         sensor = satellite.Children.Item(f"{satellite.InstanceName}_sensor")
 
+        # minduration-adjusted current date
+        adj_current_date = date_mg.get_current_date_after(self.agents_config["min_duration"])
+
         # Iterate over all point targets
         if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
             for target in scenario.Children.GetElements(AgESTKObjectType.eTarget):
                 access = sensor.GetAccessToObject(target)
-                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, date_mg.current_date)
-                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, date_mg.current_date, delta_time/100)
+                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
+                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
                 data_providers.append((access_data_provider, aer_data_provider))
 
         # Iterate over all area targets
         if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
             for target in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget):
                 access = sensor.GetAccessToObject(target)
-                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, date_mg.current_date)
-                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, date_mg.current_date, delta_time/100)
+                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
+                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
                 data_providers.append((access_data_provider, aer_data_provider))
 
         # Call the rewarder to calculate the reward

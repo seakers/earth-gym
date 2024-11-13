@@ -36,7 +36,7 @@ class DateManager():
     - fancy_date: returns the date in the fancy stk-used format.
     - month_to_number: returns the number of the month.
     - number_to_month: returns the month of the number.
-    - number_of_days_in: returns the number of days in the month.
+    - number_of_days_in_month: returns the number of days in the month.
     - update_date_after: returns the date after a given time increment.
     """
     def __init__(self, start_date: str, stop_date: str):
@@ -84,7 +84,7 @@ class DateManager():
 
         return months[number]
     
-    def number_of_days_in(self, month: str, year: int):
+    def number_of_days_in_month(self, month: str, year: int):
         """
         Return the number of days in the month.
         """
@@ -103,15 +103,20 @@ class DateManager():
                 return 28
         else:
             raise ValueError("Month must be a valid month abbreviation.")
-
-    def update_date_after(self, delta_time):
+        
+    def number_of_days_in_year(self, year: int):
         """
-        Return the date after the given number of days.
+        Return the number of days in the year.
         """
-        # Store the last date
-        self.last_date = self.current_date
-        self.last_simplified_date = self.current_simplified_date
-
+        if year % 4 == 0:
+            return 366
+        else:
+            return 365
+        
+    def get_current_date_after(self, delta_time, return_simplified: bool=False):
+        """
+        Return the date after the given number of time.
+        """
         # Get the current date
         day, month, year, hour, minute, second = self.current_simplified_date.split(" ")
         day = int(day)
@@ -142,13 +147,29 @@ class DateManager():
         minute = minute % 60
         day += int(hour / 24)
         hour = hour % 24
-        month += int(day / self.number_of_days_in(self.number_to_month(month), year))
-        day = day % self.number_of_days_in(self.number_to_month(month), year)
+        month += int(day / self.number_of_days_in_month(self.number_to_month(month), year))
+        day = day % self.number_of_days_in_month(self.number_to_month(month), year)
         year += int(month / 12)
         month = month % 12
 
+        # Simplified date
+        simplified = f"{day} {month} {year} {hour} {minute} {second}"
+
+        if return_simplified:
+            return simplified
+        else:
+            return self.fancy_date(simplified)
+
+    def update_date_after(self, delta_time):
+        """
+        Return the date after the given number of days.
+        """
+        # Store the last date
+        self.last_date = self.current_date
+        self.last_simplified_date = self.current_simplified_date
+
         # Store and return the new date
-        self.current_simplified_date = f"{day} {month} {year} {hour} {minute} {second}"
+        self.current_simplified_date = self.get_current_date_after(delta_time, return_simplified=True)
         self.current_date = self.fancy_date(self.current_simplified_date)
 
     def time_ended(self) -> bool:
@@ -170,11 +191,22 @@ class DateManager():
 
     def num_of_date(self, date: str) -> float:
         """
-        Return the number of the simplified date used.
+        Return the number of the simplified date used by converting:
+        - seconds: just as they are.
+        - minutes: x60 seconds added to the seconds.
+        - hours: x3600 seconds added to the seconds.
+        - days: x86400 seconds added to the seconds.
+        - months: x86400 number of days in month added to the seconds.
+        - years: x86400 number of days in year added to the seconds.
         """
         day, month, year, hour, minute, _ = [int(float(i)) for i in date.split(" ")]
         _, _, _, _, _, second = [float(i) for i in date.split(" ")]
-        return float(f"{year:04}{month:02}{day:02}{hour:02}{minute:02}{second:08.5f}")
+        
+        # Calculate the seconds
+        month_seconds = self.number_of_days_in_month(self.number_to_month(month), year) * 86400
+        year_seconds = self.number_of_days_in_year(year) * 86400
+        seconds = second + minute * 60 + hour * 3600 + day * 86400 + month * month_seconds + year * year_seconds
+        return seconds
 
 class SensorManager():
     """
@@ -353,6 +385,9 @@ class Rewarder():
 
                         # Find the maximum (best) angle of elevation
                         max_zen_angle = max([abs(el) for el in zen_angles])
+                        print(zen_angles, max_zen_angle)
+                        print("Date difference in start", -date_mg.num_of_date(date_mg.last_simplified_date) + date_mg.num_of_date(date_mg.simplify_date(start_time[j])))
+                        print("Date difference in stop", -date_mg.num_of_date(date_mg.simplify_date(start_time[j])) + date_mg.num_of_date(date_mg.simplify_date(stop_time[j])))
 
                         # Minimum event duration
                         min_duration = self.agents_config["min_duration"] # it does not really make sense if it is more than 60 seconds, but it is usually in the order of 1 second
@@ -361,7 +396,7 @@ class Rewarder():
                         if date_mg.num_of_date(date_mg.last_simplified_date) < date_mg.num_of_date(date_mg.simplify_date(start_time[j])) and (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:
                             ri = self.f_ri(event_name, max_zen_angle)
                             reward += ri
-                            print(f"Event {event_name} observed with a zenith angle of {max_zen_angle} and got a reward of {ri}, adding to the total of {reward}.")
+                            print(f"\nEvent {event_name} observed with a zenith {max_zen_angle:0.2f}º and got a reward of {ri:0.4f}, adding to the total of {reward:0.4f}.")
         
         return reward
     
