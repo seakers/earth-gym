@@ -1,5 +1,6 @@
 import argparse
 import traceback
+from datetime import datetime
 
 from classes.instances import Gym
 
@@ -19,8 +20,18 @@ if __name__ == "__main__":
         # Create gym environment
         gym_env = Gym(args=args)
 
+        # Time before the process
+        start_time = datetime.now()
+
         # Start the environment
         gym_env.start(host=args.host, port=args.port)
+
+        # Time after the process
+        end_time = datetime.now()
+
+        # Calculate the time difference
+        time_diff = end_time - start_time
+        print(f"Time elapsed: {time_diff}")
 
     except Exception as e:
         print(f"Error: {e}")
