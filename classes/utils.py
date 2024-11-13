@@ -485,6 +485,9 @@ class Plotter():
         if self.rewards.empty:
             raise ValueError("No rewards to plot.")
         
+        # Clear the plot
+        plt.clf()
+        
         # Plot
         plt.plot(self.rewards)
         plt.xlabel("Step")
@@ -503,13 +506,16 @@ class Plotter():
         if self.rewards.empty:
             raise ValueError("No rewards to plot.")
         
+        # Clear the plot
+        plt.clf()
+        
         # Smoothed with pandas
         smoothed_rewards = self.rewards.rolling(window=window_size).mean()
 
         # Plot
         plt.plot(smoothed_rewards)
         plt.xlabel("Step")
-        plt.ylabel("Reward")
+        plt.ylabel("Smoothed reward")
         plt.title("Smoothed rewards over time")
         
         # Save the plot
@@ -521,12 +527,18 @@ class Plotter():
         """
         Plot the cumulative rewards.
         """
+        if self.rewards.empty:
+            raise ValueError("No rewards to plot.")
+        
+        # Clear the plot
+        plt.clf()
+        
         cumulative_rewards = self.rewards.cumsum()
 
         # Plot
         plt.plot(cumulative_rewards)
         plt.xlabel("Episode")
-        plt.ylabel("Cumulative Reward")
+        plt.ylabel("Cumulative reward")
         plt.title("Cumulative reward over time")
         
         # Save the plot
@@ -541,6 +553,9 @@ class Plotter():
         if self.rewards.empty:
             raise ValueError("No rewards to plot.")
         
+        # Clear the plot
+        plt.clf()
+        
         # Smoothed with pandas
         smoothed_rewards = self.rewards.rolling(window=window_size).mean()
         cumulative_rewards = smoothed_rewards.cumsum()
@@ -549,7 +564,7 @@ class Plotter():
         # Plot
         plt.plot(cumulative_rewards)
         plt.xlabel("Step")
-        plt.ylabel("Cumulative Reward")
+        plt.ylabel("Cumulative reward")
         plt.title("Cumulative reward per step done over time")
         
         # Save the plot
