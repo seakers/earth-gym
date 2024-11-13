@@ -396,28 +396,37 @@ class Rewarder():
 
                         # Check is long enough based on min_duration
                         if (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:
+                            reward_was_seen = False
+
                             # Check if the event has been seen before and how many times
                             for i, seen in enumerate(self.seen_events):
                                 if seen[0] == event_name:
-                                    n_obs = seen[1]
-                                    self.seen_events[i][1] += 1
+                                    # The event has been seen before
+                                    reward_was_seen = True
 
-                                    print("SEEN", self.seen_events)
+                                    # This filters concatenated observations (which indeed are one observation)
+                                    if (date_mg.num_of_date(date_mg.simplify_date(seen[2])) > date_mg.num_of_date(date_mg.simplify_date(start_time[j]))):
+                                        break
+
+                                    # Update seen events property
+                                    self.seen_events[i][1] += 1
+                                    self.seen_events[i][2] = stop_time[j]
 
                                     # Reward the observation
+                                    n_obs = self.seen_events[i][1]
                                     ri = self.f_ri(max_zen_angle, n_obs)
                                     reward += ri
                                     print(f"\nObserved {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
-                                    return reward
-                                
-                            self.seen_events.append((event_name, 1))
-
-                            print("UNSEEN", self.seen_events)
+                                    break
                             
-                            # Reward the observation
-                            ri = self.f_ri(max_zen_angle, 1)
-                            reward += ri
-                            print(f"\nFirst observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+                            # If the event has not been seen before
+                            if not reward_was_seen:
+                                self.seen_events.append([event_name, 1, stop_time[j]])
+                                
+                                # Reward the observation
+                                ri = self.f_ri(max_zen_angle, 1)
+                                reward += ri
+                                print(f"\nFirst observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
         
         return reward
     
@@ -508,10 +517,10 @@ class Plotter():
         plt.plot(cumulative_rewards)
         plt.xlabel("Episode")
         plt.ylabel("Cumulative Reward")
-        plt.title("Cumulative Rewards over time")
+        plt.title("Cumulative reward over time")
         plt.show()
 
-    def plot_cumulative_rewards_per_steps(self):
+    def plot_cumulative_rewards_smoothed_per_steps(self, window_size: int=10):
         """
         Plot the cumulative rewards per steps.
         """
@@ -519,14 +528,15 @@ class Plotter():
             raise ValueError("No rewards to plot.")
         
         # Smoothed with pandas
-        cumulative_rewards = self.rewards.cumsum()
+        smoothed_rewards = self.rewards.rolling(window=window_size).mean()
+        cumulative_rewards = smoothed_rewards.cumsum()
         cumulative_rewards = cumulative_rewards.div(pd.Series(range(1, len(cumulative_rewards))), axis=0)
 
         # Plot
         plt.plot(cumulative_rewards)
         plt.xlabel("Step")
         plt.ylabel("Cumulative Reward")
-        plt.title("Cumulative Rewards over time")
+        plt.title("Cumulative reward per step done over time")
         plt.show()
 
     def plot_all(self, window_size: int=10):
@@ -536,4 +546,4 @@ class Plotter():
         self.plot_rewards()
         self.plot_rewards_smoothed(window_size=window_size)
         self.plot_cumulative_rewards()
-        self.plot_cumulative_rewards_per_steps()
+        self.plot_cumulative_rewards_smoothed_per_steps()
