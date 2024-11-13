@@ -1,4 +1,6 @@
 import math
+import pandas as pd
+import matplotlib.pyplot as plt
 
 class DataFromJSON():
     """
@@ -40,7 +42,7 @@ class DateManager():
     - update_date_after: returns the date after a given time increment.
     """
     def __init__(self, start_date: str, stop_date: str):
-        self.class_type = "Date Manager"
+        self.class_name = "Date Manager"
         self.start_date = start_date
         self.stop_date = stop_date
         self.current_date = start_date # in fancy stk-used format
@@ -216,7 +218,7 @@ class SensorManager():
     - update_elevation: update the elevation of the sensor within the boundaries.
     """
     def __init__(self, agent, sensor):
-        self.class_type = "Sensor Manager"
+        self.class_name = "Sensor Manager"
         self.sensor = sensor
         self.pattern = agent["pattern"]
         self.cone_angle = agent["cone_angle"]
@@ -269,7 +271,7 @@ class FeaturesManager():
     - update_action: update the action properties of the agent.
     """
     def __init__(self, agent):
-        self.class_type = "Features Manager"
+        self.class_name = "Features Manager"
         self.agent_config = agent
         self.set_properties(agent)
 
@@ -355,7 +357,7 @@ class Rewarder():
     - f_reobs: return the reward of the reobservation of the same event.
     """
     def __init__(self, agents_config):
-        self.class_type = "Rewarder"
+        self.class_name = "Rewarder"
         self.seen_events = []
         self.agents_config = agents_config
 
@@ -390,17 +392,36 @@ class Rewarder():
                         print("Date difference in stop", -date_mg.num_of_date(date_mg.simplify_date(start_time[j])) + date_mg.num_of_date(date_mg.simplify_date(stop_time[j])))
 
                         # Minimum event duration
-                        min_duration = self.agents_config["min_duration"] # it does not really make sense if it is more than 60 seconds, but it is usually in the order of 1 second
+                        min_duration = self.agents_config["min_duration"]
 
-                        # Check if the event is strictly after the last date (filter previously observed) and be it larger than a certain duration
-                        if date_mg.num_of_date(date_mg.last_simplified_date) < date_mg.num_of_date(date_mg.simplify_date(start_time[j])) and (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:
-                            ri = self.f_ri(event_name, max_zen_angle)
+                        # Check is long enough based on min_duration
+                        if (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:
+                            # Check if the event has been seen before and how many times
+                            for i, seen in enumerate(self.seen_events):
+                                if seen[0] == event_name:
+                                    n_obs = seen[1]
+                                    self.seen_events[i][1] += 1
+
+                                    print("SEEN", self.seen_events)
+
+                                    # Reward the observation
+                                    ri = self.f_ri(max_zen_angle, n_obs)
+                                    reward += ri
+                                    print(f"\nObserved {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+                                    return reward
+                                
+                            self.seen_events.append((event_name, 1))
+
+                            print("UNSEEN", self.seen_events)
+                            
+                            # Reward the observation
+                            ri = self.f_ri(max_zen_angle, 1)
                             reward += ri
-                            print(f"\nEvent {event_name} observed with a zenith {max_zen_angle:0.2f}º and got a reward of {ri:0.4f}, adding to the total of {reward:0.4f}.")
+                            print(f"\nFirst observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
         
         return reward
     
-    def f_ri(self, event_name: int, max_zen_angle: float):
+    def f_ri(self, max_zen_angle: float, n_obs: int):
         """
         Function rewarding a certain observation. Inputs given in the form of tuples.
         - event_pos: tuple of the event position (latitude, longitude, altitude).
@@ -408,15 +429,10 @@ class Rewarder():
         - event_name: name of the event target ('target1', for instance).
         - max_zen_angle: maximum elevation angle of the event.
         """
+        # Arbitrary profit TODO: make it a parameter
         profit = 1
-        n_obs = 0
 
-        # Check if the event has been seen before and how many times
-        for seen in self.seen_events:
-            if seen[0] == event_name:
-                n_obs = seen[1]
-                seen[1] += 1
-
+        # Each of the value functions
         f_theta = self.f_theta(max_zen_angle)
         f_reobs = self.f_reobs(n_obs)
 
@@ -435,3 +451,89 @@ class Rewarder():
         - n_obs: number of times the event has been observed.
         """
         return (1 / n_obs**self.agents_config["reobs_decay"]) if n_obs > 0 else 1
+    
+class Plotter():
+    """
+    Class to manage the plotting of the model
+    """
+    def __init__(self):
+        self.class_name = "Plotter"
+        self.rewards = pd.DataFrame()
+
+    def store_reward(self, reward):
+        """
+        Store the reward in the list.
+        """
+        reward = pd.DataFrame([reward])
+        self.rewards = pd.concat([self.rewards, reward], ignore_index=True)
+
+    def plot_rewards(self):
+        """
+        Plot the rewards as they are.
+        """
+        if self.rewards.empty:
+            raise ValueError("No rewards to plot.")
+        
+        # Plot
+        plt.plot(self.rewards)
+        plt.xlabel("Step")
+        plt.ylabel("Reward")
+        plt.title("Rewards over time")
+        plt.show()
+    
+    def plot_rewards_smoothed(self, window_size: int=10):
+        """
+        Plot the rewards within smoothed windows of size window_size.
+        """
+        if self.rewards.empty:
+            raise ValueError("No rewards to plot.")
+        
+        # Smoothed with pandas
+        smoothed_rewards = self.rewards.rolling(window=window_size).mean()
+
+        # Plot
+        plt.plot(smoothed_rewards)
+        plt.xlabel("Step")
+        plt.ylabel("Reward")
+        plt.title("Smoothed rewards over time")
+        plt.show()
+
+    def plot_cumulative_rewards(self):
+        """
+        Plot the cumulative rewards.
+        """
+        cumulative_rewards = self.rewards.cumsum()
+
+        # Plot
+        plt.plot(cumulative_rewards)
+        plt.xlabel("Episode")
+        plt.ylabel("Cumulative Reward")
+        plt.title("Cumulative Rewards over time")
+        plt.show()
+
+    def plot_cumulative_rewards_per_steps(self):
+        """
+        Plot the cumulative rewards per steps.
+        """
+        if self.rewards.empty:
+            raise ValueError("No rewards to plot.")
+        
+        # Smoothed with pandas
+        cumulative_rewards = self.rewards.cumsum()
+        cumulative_rewards = cumulative_rewards.div(pd.Series(range(1, len(cumulative_rewards))), axis=0)
+
+        # Plot
+        plt.plot(cumulative_rewards)
+        plt.xlabel("Step")
+        plt.ylabel("Cumulative Reward")
+        plt.title("Cumulative Rewards over time")
+        plt.show()
+
+    def plot_all(self, window_size: int=10):
+        """
+        Plot all the rewards.
+        """
+        self.plot_rewards()
+        self.plot_rewards_smoothed(window_size=window_size)
+        self.plot_cumulative_rewards()
+        self.plot_cumulative_rewards_per_steps()

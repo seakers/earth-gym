@@ -61,11 +61,12 @@ class Gym():
         """
         return self.stk_env.step(agent_id, action, delta_time)
     
-    def generate_gif(self):
+    def generate_output(self):
         """
         Perform final displays of the period.
         """
-        self.stk_env.stk_root.SaveScenario()
+        # Plot all the reward graphics available
+        self.stk_env.plotter.plot_all()
     
     def handle_request(self, request):
         """
@@ -83,7 +84,8 @@ class Gym():
             state, reward, done = self.get_next_state_and_reward(request_data["agent_id"], request_data["action"], request_data["delta_time"])
             return json.dumps({"state": state, "reward": reward, "done": done})
         elif request_data["command"] == "shutdown":
-            self.generate_gif()
+            self.stk_env.stk_root.SaveScenario()
+            self.generate_output()
             self.running = False
             return json.dumps({"status": "shutdown_complete"})
         else:
@@ -131,6 +133,7 @@ class STKEnvironment():
         self.satellites_tuples = []
         self.current_dates = []
         self.rewarder = Rewarder(agents_config)
+        self.plotter = Plotter()
 
         # Build the satellites by iterating over the agents
         for i, agent in enumerate(agents_config["agents"]):
@@ -364,6 +367,9 @@ class STKEnvironment():
 
         # Get the reward
         reward = self.get_reward(agent_id, self.scenario, delta_time)
+
+        # Store the reward
+        self.plotter.store_reward(reward)
 
         return state, reward, done
     
