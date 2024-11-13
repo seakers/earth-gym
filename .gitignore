@@ -1,2 +1,5 @@
 # Pycache files
 __pycache__/
+
+# .png files
+*.png

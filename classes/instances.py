@@ -40,7 +40,7 @@ class Gym():
         if args.out is None:
             raise ValueError("Output folder not specified in launch.json.")
         else:
-            self.output_folder = args.out
+            self.out_folder_path = args.out
 
     def initialize_agent(self, file_path):
         """
@@ -53,7 +53,7 @@ class Gym():
             raise ValueError("Agent configuration is empty.")
         
         # Initialize the agent with the configuration in a simplified dictionary
-        self.stk_env = STKEnvironment(DataFromJSON(agents_config, "configuration").get_dict(), self.evpt_file_path)
+        self.stk_env = STKEnvironment(DataFromJSON(agents_config, "configuration").get_dict(), self.evpt_file_path, self.out_folder_path)
     
     def get_next_state_and_reward(self, agent_id, action, delta_time):
         """
@@ -123,7 +123,7 @@ class STKEnvironment():
     """
     Class to simulate the environment using STK.
     """
-    def __init__(self, agents_config, evpt_file_path):
+    def __init__(self, agents_config, evpt_file_path, out_folder_path):
         self.agents_config = agents_config
         stk_app = STKEngine().StartApplication(noGraphics=False)
         stk_root = stk_app.NewObjectRoot()
@@ -133,7 +133,7 @@ class STKEnvironment():
         self.satellites_tuples = []
         self.current_dates = []
         self.rewarder = Rewarder(agents_config)
-        self.plotter = Plotter()
+        self.plotter = Plotter(out_folder_path)
 
         # Build the satellites by iterating over the agents
         for i, agent in enumerate(agents_config["agents"]):
