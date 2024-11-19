@@ -431,8 +431,8 @@ class STKEnvironment():
             for var in features_mg.state.keys():
                 if var not in checked_var:
                     if var in ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]:
-                        checked_var += ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]
                         features_mg.update_orbital_elements(orbital_elements)
+                        checked_var += ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]
                     elif var in ["az", "el"]:
                         features_mg.update_sensor_state(sensor_mg.current_azimuth, sensor_mg.current_elevation)
                         checked_var += ["az", "el"]
@@ -441,7 +441,7 @@ class STKEnvironment():
                         checked_var += ["detic_lat", "detic_lon", "detic_alt"]
                     else:
                         raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
-            print(features_mg.state)
+                    
             return False
 
     def get_state(self, agent_id):
@@ -461,7 +461,7 @@ class STKEnvironment():
         Get the reward of the agent based on its state-action pair.
         """
         # Get the satellite tuple
-        satellite, _, _, date_mg = self.get_satellite(agent_id)
+        satellite, _, features_mg, date_mg = self.get_satellite(agent_id)
 
         # Create the rewarder
         rewarder = self.rewarder
@@ -489,8 +489,15 @@ class STKEnvironment():
                 aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
                 data_providers.append((access_data_provider, aer_data_provider))
 
+        # Get the slew rates
+        slew_rates = []
+        for diff in features_mg.action.keys():
+            if diff in ["d_az", "d_el"]:
+                slew_rate = features_mg.action[diff] / delta_time
+                slew_rates.append(abs(slew_rate))
+
         # Call the rewarder to calculate the reward
-        reward = rewarder.calculate_reward(data_providers, date_mg)
+        reward = rewarder.calculate_reward(data_providers, date_mg, slew_rates)
 
         return reward
 

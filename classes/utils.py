@@ -385,11 +385,13 @@ class Rewarder():
         self.seen_events = []
         self.agents_config = agents_config
 
-    def calculate_reward(self, data_providers, date_mg : DateManager):
+    def calculate_reward(self, data_providers, date_mg: DateManager, slew_rates: list[float]):
         """
         Return the reward of the state-action pair given the proper data providers (acces and aer).
         """
         reward = 0
+
+        reward += self.slew_constraint(slew_rates)
 
         # Iterate over the access data providers
         for access_data_provider, aer_data_provider in data_providers:
@@ -488,6 +490,15 @@ class Rewarder():
         - n_obs: number of times the event has been observed.
         """
         return (1 / n_obs**self.agents_config["reobs_decay"]) if n_obs > 0 else 1
+    
+    def slew_constraint(self, slew_rates: list[float]):
+        """
+        Function penalizing the slew rates. Inputs given in the form of a list.
+        """
+        r = 0
+        for slew_rate in slew_rates:
+            r -= slew_rate if slew_rate > self.agents_config["max_slew"] else 0
+        return r
     
 class Plotter():
     """
