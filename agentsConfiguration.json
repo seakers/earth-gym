@@ -2,7 +2,7 @@
     "general": {
         "scenario_name": "SACTest1",
         "start_time": "1 Jan 2024 00:00:00.000",
-        "stop_time": "1 Jan 2024 05:00:00.000",
+        "stop_time": "1 Jan 2024 02:00:00.000",
         "propagator": "HPOP"
     },
     "reward_metrics": {
@@ -21,9 +21,7 @@
                     "i": 0,
                     "raan": 0,
                     "aop": 0,
-                    "ta": 0,
-                    "az": 0.0,
-                    "el": 90.0
+                    "ta": 0
                 }
             },
             "sensor": {
@@ -33,7 +31,7 @@
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
             },
-            "states_features": ["a", "e", "i", "raan", "aop", "ta", "az", "el"],
+            "states_features": ["a", "e", "i", "raan", "aop", "ta", "az", "el", "detic_lat", "detic_lon", "detic_alt"],
             "actions_features": ["d_az", "d_el"]
         }
     ]

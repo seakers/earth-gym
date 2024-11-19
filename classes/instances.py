@@ -204,6 +204,22 @@ class STKEnvironment():
         # Create the features manager
         features_mg = FeaturesManager(agent)
 
+        # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
+        checked_var = []
+        for var in agent["states_features"]:
+            if var not in checked_var:
+                if var in ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]:
+                    checked_var += ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]
+                    pass # These have their own update functions because they are included in the initial state
+                elif var in ["az", "el"]:
+                    features_mg.update_sensor_state(sensor_mg.current_azimuth, sensor_mg.current_elevation)
+                    checked_var += ["az", "el"]
+                elif var in ["detic_lat", "detic_lon", "detic_alt"]:
+                    features_mg.update_detic_state(satellite, scenario.StartTime)
+                    checked_var += ["detic_lat", "detic_lon", "detic_alt"]
+                else:
+                    raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
+
         return satellite, sensor_mg, features_mg
         
     def set_propagator_type(self, satellite):
@@ -378,12 +394,12 @@ class STKEnvironment():
         Class to update the agent's features based on the action taken and the time passed.
         """
         # Get the satellite tuple
-        satellite, sensor_mg, feature_mg, date_mg = self.get_satellite(agent_id)
+        satellite, sensor_mg, features_mg, date_mg = self.get_satellite(agent_id)
 
         # Iterate over all actions taken
         for key in action.keys():
             # Update the actions in the features manager
-            feature_mg.update_action(key, action[key])
+            features_mg.update_action(key, action[key])
 
             # Perform sensor changes
             if key == "d_az":
@@ -397,10 +413,6 @@ class STKEnvironment():
         el = sensor_mg.get_item("current_elevation")
         sensor_mg.sensor.CommonTasks.SetPointingFixedAzEl(az, el, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
 
-        # Update the features manager sensor data
-        for var in ["az", "el"]:
-            feature_mg.update_state(var, locals()[var])
-
         # Update the date manager
         date_mg.update_date_after(delta_time)
 
@@ -412,8 +424,24 @@ class STKEnvironment():
             return True
         else:
             # Find the orbital elements and update the features manager
-            orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, feature_mg.agent_config)
-            feature_mg.update_orbital_elements(orbital_elements)
+            orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, features_mg.agent_config)
+
+            # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
+            checked_var = []
+            for var in features_mg.state.keys():
+                if var not in checked_var:
+                    if var in ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]:
+                        checked_var += ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]
+                        features_mg.update_orbital_elements(orbital_elements)
+                    elif var in ["az", "el"]:
+                        features_mg.update_sensor_state(sensor_mg.current_azimuth, sensor_mg.current_elevation)
+                        checked_var += ["az", "el"]
+                    elif var in ["detic_lat", "detic_lon", "detic_alt"]:
+                        features_mg.update_detic_state(satellite, date_mg.current_date)
+                        checked_var += ["detic_lat", "detic_lon", "detic_alt"]
+                    else:
+                        raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
+            print(features_mg.state)
             return False
 
     def get_state(self, agent_id):
@@ -421,10 +449,10 @@ class STKEnvironment():
         Get the state of the agent based on the current features.
         """
         # Get the satellite tuple
-        _, _, feature_mg, _ = self.get_satellite(agent_id)
+        _, _, features_mg, _ = self.get_satellite(agent_id)
 
         # Get the features of the agent
-        state = feature_mg.get_state()
+        state = features_mg.get_state()
 
         return [value for value in state.values()]
 

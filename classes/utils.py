@@ -291,7 +291,7 @@ class FeaturesManager():
             if state in agent.keys():
                 self.state[state] = agent[state]
             else:
-                raise ValueError(f"State {state} does not exist in the agent initial state. Check the configuration file.")
+                self.state[state] = None
             
         # Iterate over the actions
         for action in self.actions_features:
@@ -325,7 +325,6 @@ class FeaturesManager():
         """
         Update the orbital elements of the agent.
         """
-        # Update into the feature manager
         if self.agent_config["coordinate_system"] == "Classical":
             for key in ["a", "e", "i", "raan", "aop", "ta"]:
                 self.update_state(key, orbital_elements.DataSets.GetDataSetByName(self.long_name_of(key)).GetValues()[0])
@@ -334,6 +333,30 @@ class FeaturesManager():
                 self.update_state(key, orbital_elements.DataSets.GetDataSetByName(self.long_name_of(key)).GetValues()[0])
         else:
             raise ValueError("Invalid coordinate system. Please use 'Classical' or 'Cartesian'.")
+        
+    def update_sensor_state(self, az, el):
+        """
+        Update the sensor state of the agent.
+        """
+        if "az" in self.state.keys():
+            self.update_state("az", az)
+        if "el" in self.state.keys():
+            self.update_state("el", el)
+        
+    def update_detic_state(self, satellite, time):
+        """
+        Update the LLA state of the agent.
+        """
+        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(time).DataSets
+        detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0] # Group Items --> 0: TrueOfDateRotating, 1: Fixed
+        detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
+        detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
+        if "detic_lat" in self.state.keys():
+            self.update_state("detic_lat", detic_lat)
+        if "detic_lon" in self.state.keys():
+            self.update_state("detic_lon", detic_lon)
+        if "detic_alt" in self.state.keys():
+            self.update_state("detic_alt", detic_alt)
         
     def long_name_of(self, short_name):
         """
