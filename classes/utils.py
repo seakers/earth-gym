@@ -390,6 +390,75 @@ class FeaturesManager():
         long_to_short = {"Semi-major Axis": "a", "Eccentricity": "e", "Inclination": "i", "RAAN": "raan", "Arg of Perigee": "aop", "True Anomaly": "ta"}
         return long_to_short[long_name]
 
+class TargetManager():
+    """
+    Class to manage the targets of the model.
+    """
+    def __init__(self):
+        self.class_name = "Target Manager"
+        self.df = pd.DataFrame()
+
+    def append_zone(self, name: str, type: str, lat: float, lon: float, priority: float, n_obs: int=0, last_seen: str=""):
+        """
+        Append a zone to the dataframe.
+        """
+        self.df = self.df._append({"name": name, "type": type, "lat [deg]": lat, "lon [deg]": lon, "priority [1, 10]": priority, "n_obs": n_obs, "last seen": last_seen}, ignore_index=True)
+
+    def erase_first_n_zones(self, n: int):
+        """
+        Delete the first n zones from the dataframe.
+        """
+        self.df = pd.DataFrame(self.df.iloc[n:])
+
+    def plus_one_obs(self, name: str):
+        """
+        Increase the number of observations of the zone by one.
+        """
+        self.df.loc[self.df["name"] == name, "n_obs"] += 1
+
+    def update_last_seen(self, name: str, date: str):
+        """
+        Update the last seen date of the zone.
+        """
+        self.df.loc[self.df["name"] == name, "last seen"] = date
+
+    def get_n_obs(self, name: str):
+        """
+        Return the number of observations of the zone.
+        """
+        return self.get_zone_by_name(name)["n_obs"].values[0]
+    
+    def get_last_seen(self, name: str):
+        """
+        Return the last seen date of the zone.
+        """
+        return self.get_zone_by_name(name)["last seen"].values[0]
+    
+    def get_priority(self, name: str):
+        """
+        Return the priority of the zone.
+        """
+        return self.get_zone_by_name(name)["priority [1, 10]"].values[0]
+
+    def get_zone_by_row(self, i: int) -> pd.DataFrame:
+        """
+        Return the zone by row.
+        """
+        return pd.DataFrame(self.df.iloc[i]).T
+    
+    def get_zone_by_name(self, name: str) -> pd.DataFrame:
+        """
+        Return the zone by name.
+        """
+        zone = self.df[self.df["name"] == name]
+
+        if zone.empty:
+            raise ValueError(f"Zone {name} not found in the dataframe.")
+        elif zone.shape[0] > 1:
+            raise ValueError(f"Zone {name} found multiple times in the dataframe.")
+        
+        return zone
+
 class Rewarder():
     """
     Class to manage the reward of the model. Functions:
@@ -398,12 +467,13 @@ class Rewarder():
     - f_theta: return the reward of the angle between the event and the satellite.
     - f_reobs: return the reward of the reobservation of the same event.
     """
-    def __init__(self, agents_config):
+    def __init__(self, agents_config, target_mg: TargetManager):
         self.class_name = "Rewarder"
         self.seen_events = []
+        self.target_mg = target_mg
         self.agents_config = agents_config
 
-    def calculate_reward(self, data_providers, zones, date_mg: DateManager, slew_rates: list[float]):
+    def calculate_reward(self, data_providers, date_mg: DateManager, slew_rates: list[float]):
         """
         Return the reward of the state-action pair given the proper data providers (acces and aer).
         """
@@ -440,40 +510,37 @@ class Rewarder():
 
                         # Minimum event duration
                         min_duration = self.agents_config["min_duration"]
-                        priority = zones[zones["name"] == event_name]["priority [1, 10]"].values[0]
+
+                        # Get the zone information
+                        zone_n_obs = self.target_mg.get_n_obs(event_name)
+                        zone_last_seen = self.target_mg.get_last_seen(event_name)
+                        zone_priority = self.target_mg.get_priority(event_name)
 
                         # Check is long enough based on min_duration
-                        if (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:
-                            reward_was_seen = False
-
+                        if (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:                            
                             # Check if the event has been seen before and how many times
-                            for i, seen in enumerate(self.seen_events):
-                                if seen[0] == event_name:
-                                    # The event has been seen before
-                                    last_seen = date_mg.num_of_date(date_mg.simplify_date(seen[2])) # need this line to avoid pointer to tuple
-                                    reward_was_seen = True
-                                    self.seen_events[i][2] = stop_time[j]
-
-                                    # This filters concatenated observations (which indeed are one observation)
-                                    if (last_seen - min_duration) >= date_mg.num_of_date(date_mg.simplify_date(start_time[j])): # min_duration added because of added in .Exec() too
-                                        break
-
-                                    # Event is seen again
-                                    self.seen_events[i][1] += 1
-
-                                    # Reward the observation
-                                    n_obs = self.seen_events[i][1]
-                                    ri = self.f_ri(priority, max_zen_angle, n_obs)
-                                    reward += ri
-                                    print(f"Observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
-                                    break
-                            
-                            # If the event has not been seen before
-                            if not reward_was_seen:
-                                self.seen_events.append([event_name, 1, stop_time[j]])
+                            if zone_n_obs != 0:
+                                # Check the number of observations is not negative
+                                if zone_n_obs < 0:
+                                    raise ValueError("Number of observations cannot be negative.")
                                 
-                                # Reward the observation
-                                ri = self.f_ri(priority, max_zen_angle, 1)
+                                # Change the last seen date format
+                                last_seen = date_mg.num_of_date(date_mg.simplify_date(zone_last_seen))
+                                self.target_mg.update_last_seen(event_name, stop_time[j])
+
+                                # This filters concatenated observations (which indeed are one observation)
+                                if not (last_seen - min_duration) >= date_mg.num_of_date(date_mg.simplify_date(start_time[j])): # min_duration added because of added in .Exec() too
+                                    break
+
+                                self.target_mg.plus_one_obs(event_name)
+                                n_obs = self.target_mg.get_n_obs(event_name)
+                                ri = self.f_ri(zone_priority, max_zen_angle, n_obs)
+                                reward += ri
+                                print(f"Observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+                            else:
+                                self.target_mg.plus_one_obs(event_name)
+                                self.target_mg.update_last_seen(event_name, stop_time[j])
+                                ri = self.f_ri(zone_priority, max_zen_angle, 1)
                                 reward += ri
                                 print(f"First observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
         

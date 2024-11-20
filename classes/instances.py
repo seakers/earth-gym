@@ -125,18 +125,20 @@ class STKEnvironment():
     """
     def __init__(self, agents_config, evpt_file_path, out_folder_path):
         self.agents_config = agents_config
+        self.evpt_file_path = evpt_file_path
+        self.out_folder_path = out_folder_path
         stk_app = STKEngine().StartApplication(noGraphics=False)
         stk_root = stk_app.NewObjectRoot()
         self.stk_app = stk_app
         self.stk_root = stk_root
         self.scenario = self.build_scenario(self.stk_root, self.agents_config)
         self.satellites_tuples = []
-        self.zones = pd.DataFrame()
-        self.rewarder = Rewarder(agents_config)
+        self.target_mg = TargetManager()
+        self.rewarder = Rewarder(agents_config, self.target_mg)
         self.plotter = Plotter(out_folder_path)
 
         # Add the zones of interest
-        self.draw_event_zones(evpt_file_path, self.stk_root, self.scenario)
+        self.draw_initial_event_zones(evpt_file_path, self.scenario)
 
         # Build the satellites by iterating over the agents
         for i, agent in enumerate(agents_config["agents"]):
@@ -218,7 +220,7 @@ class STKEnvironment():
                     features_mg.update_detic_state(satellite, scenario.StartTime)
                     checked_var += ["detic_lat", "detic_lon", "detic_alt"]
                 elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
-                    features_mg.update_target_memory(self.zones)
+                    features_mg.update_target_memory(self.target_mg.df)
                     target_number = int(var.split("_")[1])
                     checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
                     pass
@@ -298,18 +300,34 @@ class STKEnvironment():
         else:
             raise ValueError("Invalid sensor pattern. Please use 'Simple Conic'.")
         
-    def draw_event_zones(self, file_path, root, scenario):
+    def draw_initial_event_zones(self, file_path, scenario):
         """
         Draw the event zones (points or areas) on the scenario map.
         """
         # Create the events zones
-        event_zones = pd.read_csv(file_path)
+        self.all_event_zones = pd.read_csv(file_path)
 
-        # Trim the data to X sampled zones
-        zones = event_zones.sample(100, ignore_index=True)
+        # Draw 100 zones on the scenario map
+        self.draw_n_zones(self.agents_config["visible_targets"], self.all_event_zones, scenario)
+
+    def draw_n_zones(self, n: int, given_zones: pd.DataFrame, scenario, first_id: int=0):
+        """
+        Draw n event zones on the scenario map.
+        """
+        if n > given_zones.shape[0]:
+            raise ValueError("The number of zones to draw is higher than the number of zones in the file.")
+        elif n == 0:
+            return
+        
+        # Sample n zones from the dataframe
+        zones = given_zones.sample(n, ignore_index=True)
 
         # Define specific objects or grid zones to check for coverage
         for i in range(zones.shape[0]):
+            # Get down to 0 if i+first_id is equal to the number of visible targets
+            if i+first_id == self.agents_config["visible_targets"]:
+                first_id = -i
+
             # See if a certain column exists in the dataframe
             if "lat [deg]" and "lon [deg]" in zones.columns:
                 lat = float(zones.loc[i, "lat [deg]"])
@@ -319,35 +337,34 @@ class STKEnvironment():
                 # Check if altitude is specified
                 if "alt [m]" in zones.columns:
                     alt = float(zones.loc[i, "lat [deg]"])
-                    self.point_drawing(scenario, i, lat, lon, priority, alt)
+                    self.point_drawing(scenario, i+first_id, lat, lon, priority, alt)
                 else:
-                    self.point_drawing(scenario, i, lat, lon, priority, alt=0)
+                    self.point_drawing(scenario, i+first_id, lat, lon, priority, alt=0)
             elif "lat 1 [deg]" and "lon 1 [deg]" in zones.columns:
                 lats = [float(zones.loc[i, f"lat {j} [deg]"]) for j in range(int(len(zones.columns)))]
                 lons = [float(zones.loc[i, f"lon {j} [deg]"]) for j in range(int(len(zones.columns)))]
-                self.area_drawing(scenario, i, lats, lons)
+                priority = float(zones.loc[i, "priority [1, 10]"])
+                self.area_drawing(scenario, i+first_id, lats, lons, priority)
             else:
                 raise ValueError("The column names for the event zones file is are not recognized. Please use 'lat [deg]' and 'lon [deg]' format or 'lat 1 [deg]', 'lon 1 [deg]', ... format.")
 
-        root.EndUpdate()
-
-    def point_drawing(self, scenario, idx: int, lat, lon, priority, alt=0):
+    def point_drawing(self, scenario: IAgStkObject, idx: int, lat, lon, priority, alt=0):
         """
         Draw a point target on the scenario map.
         """
         # Create the point target
-        target = scenario.Children.New(AgESTKObjectType.eTarget, f"target{idx+1}")
+        target = scenario.Children.New(AgESTKObjectType.eTarget, f"target{idx}")
         target.Position.AssignGeodetic(lat, lon, alt)
 
         # Store the zones
-        self.zones = self.zones._append({"lat [deg]": lat, "lon [deg]": lon, "priority [1, 10]": priority, "name": f"target{idx+1}"}, ignore_index=True)
+        self.target_mg.append_zone(f"target{idx}", "Point", lat, lon, priority)
 
-    def area_drawing(self, scenario, idx: int, lats, lons):
+    def area_drawing(self, scenario, idx: int, lats, lons, priority):
         """
         Draw an area target on the scenario map.
         """
         # Create the area target
-        target = scenario.Children.New(AgESTKObjectType.eAreaTarget, f"target{idx+1}")
+        target = scenario.Children.New(AgESTKObjectType.eAreaTarget, f"target{idx}")
         target.AreaType = AgEAreaType.ePattern
 
         if len(lats) != len(lons):
@@ -370,6 +387,19 @@ class STKEnvironment():
             lat_lon_added += 1
 
         target.AutoCentroid = True
+
+        # Store the zones
+        self.target_mg.append_zone(f"target{idx}", "Area", lats[0], lons[0], priority)
+
+    def delete_object(self, scenario: IAgStkObject, name: str, type: str):
+        """
+        Delete n event zones from the scenario map.
+        """
+        # Unload the object from the scenario
+        if type == "Point":
+            scenario.Children.Unload(AgESTKObjectType.eTarget, name)
+        elif type == "Area":
+            scenario.Children.Unload(AgESTKObjectType.eAreaTarget, name)
         
     def step(self, agent_id, action, delta_time):
         """
@@ -396,9 +426,36 @@ class STKEnvironment():
         # Store the reward
         self.plotter.store_reward(reward)
 
-        print(state)
+        # Delete and draw n zones
+        n = int(delta_time/self.agents_config["target_renew_time"])
+        self.erase_and_draw_zones(n)
 
         return state, reward, done
+    
+    def erase_and_draw_zones(self, n):
+        """
+        Erase and draw n event zones on the scenario map.
+        """
+        # Check it is not too many changes
+        n = n if n < len(self.target_mg.df) else len(self.target_mg.df)
+
+        first_id = 0
+
+        # Delete n zones
+        for i in range(n):
+            zone = self.target_mg.get_zone_by_row(i)
+            name = zone["name"].values[0]
+            type = zone["type"].values[0]
+            self.delete_object(self.scenario, name, type)
+
+            if i == 0:
+                first_id = int(name.split("target")[1])
+
+        # Erase these from the target memory
+        self.target_mg.erase_first_n_zones(n)
+        
+        # Draw n zones
+        self.draw_n_zones(n, self.all_event_zones, self.scenario, first_id)
     
     def update_agent(self, agent_id, action, delta_time):
         """
@@ -451,7 +508,7 @@ class STKEnvironment():
                         features_mg.update_detic_state(satellite, date_mg.current_date)
                         checked_var += ["detic_lat", "detic_lon", "detic_alt"]
                     elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
-                        features_mg.update_target_memory(self.zones)
+                        features_mg.update_target_memory(self.target_mg.df)
                         target_number = int(var.split("_")[1])
                         checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
                         pass
@@ -513,7 +570,7 @@ class STKEnvironment():
                 slew_rates.append(abs(slew_rate))
 
         # Call the rewarder to calculate the reward
-        reward = rewarder.calculate_reward(data_providers, self.zones, date_mg, slew_rates)
+        reward = rewarder.calculate_reward(data_providers, date_mg, slew_rates)
 
         return reward
 
