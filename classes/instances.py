@@ -414,7 +414,7 @@ class STKEnvironment():
             return None, None, done
 
         # Get the next state
-        state = self.get_state(agent_id)
+        state = self.get_state(agent_id, as_dict=True)
 
         # If zero delta time, return only the state and do not enter the reward calculation
         if delta_time == 0.0:
@@ -517,7 +517,7 @@ class STKEnvironment():
                     
             return False
 
-    def get_state(self, agent_id):
+    def get_state(self, agent_id, as_dict=False):
         """
         Get the state of the agent based on the current features.
         """
@@ -527,7 +527,7 @@ class STKEnvironment():
         # Get the features of the agent
         state = features_mg.get_state()
 
-        return [value for value in state.values()]
+        return state if as_dict else [value for value in state.values()]
 
     def get_reward(self, agent_id, scenario: IAgStkObject, delta_time: float) -> float:
         """
