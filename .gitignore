@@ -1,6 +1,8 @@
-# Pycache files
+# Pycache folders
 __pycache__/
 
 # Representation files
 *.png
 *.eps
+*.jpg
+*.jpeg
