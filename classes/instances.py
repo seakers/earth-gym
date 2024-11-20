@@ -42,7 +42,7 @@ class Gym():
         else:
             self.out_folder_path = args.out
 
-    def initialize_agent(self, file_path):
+    def initialize_world(self, file_path):
         """
         Initialize the agent with the given configuration.
         """
@@ -104,8 +104,8 @@ class Gym():
         conn, addr = server_socket.accept()
         print(f"Connected to: {addr}")
 
-        # Initialize the agent before starting the loop
-        self.initialize_agent(self.conf_file_path)
+        # Initialize the world before starting the loop
+        self.initialize_world(self.conf_file_path)
         
         # Loop to handle the requests
         while self.running:
@@ -131,9 +131,12 @@ class STKEnvironment():
         self.stk_root = stk_root
         self.scenario = self.build_scenario(self.stk_root, self.agents_config)
         self.satellites_tuples = []
-        self.current_dates = []
+        self.zones = pd.DataFrame()
         self.rewarder = Rewarder(agents_config)
         self.plotter = Plotter(out_folder_path)
+
+        # Add the zones of interest
+        self.draw_event_zones(evpt_file_path, self.stk_root, self.scenario)
 
         # Build the satellites by iterating over the agents
         for i, agent in enumerate(agents_config["agents"]):
@@ -141,9 +144,6 @@ class STKEnvironment():
             satellite, sensor_mg, features_mg = self.build_satellite(agent, self.scenario, i)
             date_mg = DateManager(self.scenario.StartTime, self.scenario.StopTime)
             self.satellites_tuples.append((satellite, sensor_mg, features_mg, date_mg)) # append the satellite, its sensor manager and its date manager
-
-        # Add the zones of interest
-        self.draw_event_zones(evpt_file_path, self.stk_root, self.scenario)
 
     def build_scenario(self, root: AgStkObjectRoot, agents_config) -> IAgStkObject:
         """
@@ -217,6 +217,11 @@ class STKEnvironment():
                 elif var in ["detic_lat", "detic_lon", "detic_alt"]:
                     features_mg.update_detic_state(satellite, scenario.StartTime)
                     checked_var += ["detic_lat", "detic_lon", "detic_alt"]
+                elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
+                    features_mg.update_target_memory(self.zones)
+                    target_number = int(var.split("_")[1])
+                    checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
+                    pass
                 else:
                     raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
 
@@ -309,13 +314,14 @@ class STKEnvironment():
             if "lat [deg]" and "lon [deg]" in zones.columns:
                 lat = float(zones.loc[i, "lat [deg]"])
                 lon = float(zones.loc[i, "lon [deg]"])
+                priority = float(zones.loc[i, "priority [1, 10]"])
 
                 # Check if altitude is specified
                 if "alt [m]" in zones.columns:
                     alt = float(zones.loc[i, "lat [deg]"])
-                    self.point_drawing(scenario, i, lat, lon, alt)
+                    self.point_drawing(scenario, i, lat, lon, priority, alt)
                 else:
-                    self.point_drawing(scenario, i, lat, lon, alt=0)
+                    self.point_drawing(scenario, i, lat, lon, priority, alt=0)
             elif "lat 1 [deg]" and "lon 1 [deg]" in zones.columns:
                 lats = [float(zones.loc[i, f"lat {j} [deg]"]) for j in range(int(len(zones.columns)))]
                 lons = [float(zones.loc[i, f"lon {j} [deg]"]) for j in range(int(len(zones.columns)))]
@@ -325,13 +331,16 @@ class STKEnvironment():
 
         root.EndUpdate()
 
-    def point_drawing(self, scenario, idx: int, lat, lon, alt=0):
+    def point_drawing(self, scenario, idx: int, lat, lon, priority, alt=0):
         """
         Draw a point target on the scenario map.
         """
         # Create the point target
         target = scenario.Children.New(AgESTKObjectType.eTarget, f"target{idx+1}")
         target.Position.AssignGeodetic(lat, lon, alt)
+
+        # Store the zones
+        self.zones = self.zones._append({"lat [deg]": lat, "lon [deg]": lon, "priority [1, 10]": priority, "name": f"target{idx+1}"}, ignore_index=True)
 
     def area_drawing(self, scenario, idx: int, lats, lons):
         """
@@ -387,6 +396,8 @@ class STKEnvironment():
         # Store the reward
         self.plotter.store_reward(reward)
 
+        print(state)
+
         return state, reward, done
     
     def update_agent(self, agent_id, action, delta_time):
@@ -439,6 +450,11 @@ class STKEnvironment():
                     elif var in ["detic_lat", "detic_lon", "detic_alt"]:
                         features_mg.update_detic_state(satellite, date_mg.current_date)
                         checked_var += ["detic_lat", "detic_lon", "detic_alt"]
+                    elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
+                        features_mg.update_target_memory(self.zones)
+                        target_number = int(var.split("_")[1])
+                        checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
+                        pass
                     else:
                         raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
                     
@@ -497,7 +513,7 @@ class STKEnvironment():
                 slew_rates.append(abs(slew_rate))
 
         # Call the rewarder to calculate the reward
-        reward = rewarder.calculate_reward(data_providers, date_mg, slew_rates)
+        reward = rewarder.calculate_reward(data_providers, self.zones, date_mg, slew_rates)
 
         return reward
 

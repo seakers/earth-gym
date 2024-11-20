@@ -9,7 +9,8 @@
         "min_duration": 0.5,
         "reobs_decay": 2,
         "zenith_weight": 1,
-        "max_slew": 1
+        "max_slew": 1,
+        "priority_weight": 1
     },
     "agents": [
         {
@@ -32,7 +33,7 @@
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
             },
-            "states_features": ["a", "e", "i", "raan", "aop", "ta", "az", "el", "detic_lat", "detic_lon", "detic_alt"],
+            "states_features": ["a", "e", "i", "raan", "aop", "ta", "az", "el", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1", "lat_2", "lon_2", "priority_2"],
             "actions_features": ["d_az", "d_el"]
         }
     ]

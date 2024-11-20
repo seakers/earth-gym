@@ -285,6 +285,8 @@ class FeaturesManager():
         self.action = {}
         self.states_features = agent["states_features"]
         self.actions_features = agent["actions_features"]
+        self.target_memory = 0
+        self.current_targets_in_memory = []
 
         # Iterate over the states
         for state in self.states_features:
@@ -292,6 +294,9 @@ class FeaturesManager():
                 self.state[state] = agent[state]
             else:
                 self.state[state] = None
+            
+            if state.startswith("lat_"):
+                self.target_memory += 1
             
         # Iterate over the actions
         for action in self.actions_features:
@@ -357,6 +362,19 @@ class FeaturesManager():
             self.update_state("detic_lon", detic_lon)
         if "detic_alt" in self.state.keys():
             self.update_state("detic_alt", detic_alt)
+
+    def update_target_memory(self, zones):
+        """
+        Update the target memory of the agent.
+        """
+        seeking_zones = zones.sample(self.target_memory, ignore_index=True)
+
+        self.current_targets_in_memory = [seeking_zones["name"] for _ in range(self.target_memory)]
+
+        for i in range(self.target_memory):
+            self.update_state(f"lat_{i+1}", seeking_zones["lat [deg]"][i])
+            self.update_state(f"lon_{i+1}", seeking_zones["lon [deg]"][i])
+            self.update_state(f"priority_{i+1}", seeking_zones["priority [1, 10]"][i])
         
     def long_name_of(self, short_name):
         """
@@ -385,7 +403,7 @@ class Rewarder():
         self.seen_events = []
         self.agents_config = agents_config
 
-    def calculate_reward(self, data_providers, date_mg: DateManager, slew_rates: list[float]):
+    def calculate_reward(self, data_providers, zones, date_mg: DateManager, slew_rates: list[float]):
         """
         Return the reward of the state-action pair given the proper data providers (acces and aer).
         """
@@ -422,6 +440,7 @@ class Rewarder():
 
                         # Minimum event duration
                         min_duration = self.agents_config["min_duration"]
+                        priority = zones[zones["name"] == event_name]["priority [1, 10]"].values[0]
 
                         # Check is long enough based on min_duration
                         if (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:
@@ -444,7 +463,7 @@ class Rewarder():
 
                                     # Reward the observation
                                     n_obs = self.seen_events[i][1]
-                                    ri = self.f_ri(max_zen_angle, n_obs)
+                                    ri = self.f_ri(priority, max_zen_angle, n_obs)
                                     reward += ri
                                     print(f"Observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
                                     break
@@ -454,13 +473,13 @@ class Rewarder():
                                 self.seen_events.append([event_name, 1, stop_time[j]])
                                 
                                 # Reward the observation
-                                ri = self.f_ri(max_zen_angle, 1)
+                                ri = self.f_ri(priority, max_zen_angle, 1)
                                 reward += ri
                                 print(f"First observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
         
         return reward
     
-    def f_ri(self, max_zen_angle: float, n_obs: int):
+    def f_ri(self, priority: float, max_zen_angle: float, n_obs: int):
         """
         Function rewarding a certain observation. Inputs given in the form of tuples.
         - event_pos: tuple of the event position (latitude, longitude, altitude).
@@ -468,8 +487,8 @@ class Rewarder():
         - event_name: name of the event target ('target1', for instance).
         - max_zen_angle: maximum elevation angle of the event.
         """
-        # Arbitrary profit TODO: make it a parameter
-        profit = 1
+        # Target-specific profit
+        profit = self.agents_config["priority_weight"] * priority
 
         # Each of the value functions
         f_theta = self.f_theta(max_zen_angle)
