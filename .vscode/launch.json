@@ -43,7 +43,8 @@
             "python": "C:\\Users\\gerardmr\\.conda\\envs\\sac\\python",
             "args": [
                 "--host", "localhost",
-                "--port", "5555"
+                "--port", "5555",
+                "--save", "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\sacTransformerEOS\\trained",
             ]
         }
     ],

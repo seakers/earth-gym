@@ -630,13 +630,7 @@ class Plotter():
         if self.rewards.empty:
             raise ValueError("No rewards to plot.")
         
-        # Correct the window size
-        if window_size == 0:
-            window_size = int(len(self.rewards) / 10)
-        
-        # Check the window size
-        if window_size < 1:
-            window_size = 1
+        window_size = self.correct_window_size(window_size)
         
         # Clear the plot
         plt.clf()
@@ -686,6 +680,8 @@ class Plotter():
         if self.rewards.empty:
             raise ValueError("No rewards to plot.")
         
+        window_size = self.correct_window_size(window_size)
+        
         # Clear the plot
         plt.clf()
         
@@ -712,4 +708,18 @@ class Plotter():
         self.plot_rewards()
         self.plot_rewards_smoothed(window_size=window_size)
         self.plot_cumulative_rewards()
-        self.plot_cumulative_rewards_smoothed_per_steps()
+        self.plot_cumulative_rewards_smoothed_per_steps(window_size=window_size)
+
+    def correct_window_size(self, window_size: int):
+        """
+        Correct the window size if it is negative.
+        """
+        # Correct the window size
+        if window_size == 0:
+            window_size = int(len(self.rewards) / 10)
+        
+        # Check the window size
+        if window_size < 1:
+            window_size = 1
+
+        return window_size
