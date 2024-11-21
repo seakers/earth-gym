@@ -623,12 +623,20 @@ class Plotter():
             os.makedirs(self.out_folder_path)
         plt.savefig(f"{self.out_folder_path}\\rewards.png", dpi=500)
     
-    def plot_rewards_smoothed(self, window_size: int=10):
+    def plot_rewards_smoothed(self, window_size: int=0):
         """
         Plot the rewards within smoothed windows of size window_size.
         """
         if self.rewards.empty:
             raise ValueError("No rewards to plot.")
+        
+        # Correct the window size
+        if window_size == 0:
+            window_size = int(len(self.rewards) / 10)
+        
+        # Check the window size
+        if window_size < 1:
+            window_size = 1
         
         # Clear the plot
         plt.clf()
@@ -697,7 +705,7 @@ class Plotter():
             os.makedirs(self.out_folder_path)
         plt.savefig(f"{self.out_folder_path}\\cumulative_rewards_smoothed_per_steps.png", dpi=500)
 
-    def plot_all(self, window_size: int=10):
+    def plot_all(self, window_size: int=0):
         """
         Plot all the rewards.
         """

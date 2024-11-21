@@ -2,7 +2,7 @@
     "general": {
         "scenario_name": "SACTest1",
         "start_time": "1 Jan 2024 00:00:00.000",
-        "stop_time": "1 Jan 2024 00:10:00.000",
+        "stop_time": "1 Jan 2024 02:00:00.000",
         "propagator": "HPOP",
         "visible_targets": 100,
         "target_renew_time": 7
@@ -30,7 +30,7 @@
             },
             "sensor": {
                     "pattern": "Simple Conic",
-                    "cone_angle": 60,
+                    "cone_angle": 20,
                     "resolution": 0.1,
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
