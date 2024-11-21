@@ -583,7 +583,7 @@ class Rewarder():
         """
         r = 0
         for slew_rate in slew_rates:
-            r -= slew_rate if slew_rate > self.agents_config["max_slew"] else 0
+            r -= 10 if slew_rate > self.agents_config["max_slew"] else 0
         return r
     
 class Plotter():
