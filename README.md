@@ -1,4 +1,4 @@
-# earthGym
+# Earth Gym
 Gym for RL-trained satellite models.
 
 ## Requirements
