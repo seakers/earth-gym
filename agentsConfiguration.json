@@ -19,7 +19,10 @@
             "position": {
                 "reference_frame": "ICRF",
                 "coordinate_system": "Classical",
-                "initial_state": {
+                "initial_pitch": 0,
+                "initial_roll": 0,
+                "align_attitude_to": 0,
+                "initial_orbital_elements": {
                     "a": 7000,
                     "e": 0,
                     "i": 0,
@@ -35,7 +38,7 @@
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
             },
-            "states_features": ["a", "e", "i", "raan", "aop", "ta", "az", "el", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1", "lat_2", "lon_2", "priority_2"],
+            "states_features": ["a", "e", "i", "raan", "aop", "ta", "pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1", "lat_2", "lon_2", "priority_2"],
             "actions_features": ["d_az", "d_el"]
         }
     ]

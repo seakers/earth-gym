@@ -211,6 +211,78 @@ class DateManager():
         seconds = second + minute * 60 + hour * 3600 + day * 86400 + month * month_seconds + year * year_seconds
         return seconds
 
+class AttitudeManager():
+    """
+    Class to manage the attitude of the model. Functions:
+    - get_item: return the value of the item.
+    - update_pitch: update the pitch of the agent within the boundaries.
+    - update_roll: update the roll of the agent within the boundaries.
+    """
+    def __init__(self, agent):
+        self.class_name = "Attitude Manager"
+        self.pitch = agent["initial_pitch"]
+        self.roll = agent["initial_roll"]
+        if agent["attitude_align"] == "Nadir(Centric)":
+            self.align_reference = "Nadir(Centric)"
+            self.unallowed_angles = {"pitch": [90, -90]}
+            self.constrained_reference = "Velocity"
+        else:
+            raise NotImplementedError("Invalid attitude alignment. Please use 'Nadir(Centric)'.")
+
+    def get_item(self, name):
+        """
+        Return the value of the item.
+        """
+        if hasattr(self, name):
+            return getattr(self, name)
+        else:
+            raise ValueError(f"Variable {name} does not exist in the class. Check the configuration file.")
+        
+    def update_pr(self, delta_pitch, delta_roll):
+        """
+        Update the pitch and roll of the agent within the boundaries.
+        """
+        self.update_pitch(delta_pitch)
+        self.update_roll(delta_roll)
+
+        return self.pitch, self.roll
+
+    def update_pitch(self, delta_pitch):
+        """
+        Update the pitch of the agent within the boundaries.
+        """
+        self.pitch += delta_pitch
+
+        if "pitch" in self.unallowed_angles.keys() and self.pitch in self.unallowed_angles["pitch"]:
+            self.pitch += 1e-4
+
+        # Correct the pitch if out of boundaries
+        if self.pitch > 90:
+            self.pitch -= 180
+            self.roll += 180
+        elif self.pitch < -90:
+            self.pitch += 180
+            self.roll += 180
+
+        return self.pitch
+    
+    def update_roll(self, delta_roll):
+        """
+        Update the roll of the agent within the boundaries.
+        """
+        self.roll += delta_roll
+
+        if "roll" in self.unallowed_angles.keys() and self.roll in self.unallowed_angles["roll"]:
+            self.roll += 1e-4
+
+        # Correct the roll if out of boundaries
+        if self.roll > 180:
+            self.roll -= 360
+        elif self.roll < -180:
+            self.roll += 360
+
+        return self.roll
+
 class SensorManager():
     """
     Class to understand and manage the date and time of the simulation. Functions:
@@ -338,6 +410,15 @@ class FeaturesManager():
                 self.update_state(key, orbital_elements.DataSets.GetDataSetByName(self.long_name_of(key)).GetValues()[0])
         else:
             raise ValueError("Invalid coordinate system. Please use 'Classical' or 'Cartesian'.")
+    
+    def update_attitude_state(self, pitch, roll):
+        """
+        Update the attitude state of the agent.
+        """
+        if "pitch" in self.state.keys():
+            self.update_state("pitch", pitch)
+        if "roll" in self.state.keys():
+            self.update_state("roll", roll)
         
     def update_sensor_state(self, az, el):
         """
