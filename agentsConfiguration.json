@@ -2,16 +2,15 @@
     "general": {
         "scenario_name": "SACTest1",
         "start_time": "1 Jan 2024 00:00:00.000",
-        "stop_time": "2 Jan 2024 00:00:00.000",
+        "stop_time": "1 Jan 2024 00:30:00.000",
         "propagator": "HPOP",
         "visible_targets": 100,
-        "target_renew_time": 30
+        "target_renew_time": 1000000
     },
     "reward_metrics": {
         "min_duration": 0.5,
         "reobs_decay": 2,
         "zenith_weight": 1,
-        "max_slew": 1,
         "priority_weight": 1
     },
     "agents": [
@@ -21,7 +20,10 @@
                 "coordinate_system": "Classical",
                 "initial_pitch": 0,
                 "initial_roll": 0,
-                "align_attitude_to": 0,
+                "attitude_align": "Nadir(Centric)",
+                "max_slew_speed": 50,
+                "max_slew_accel": 2,
+
                 "initial_orbital_elements": {
                     "a": 7000,
                     "e": 0,
@@ -35,11 +37,12 @@
                     "pattern": "Simple Conic",
                     "cone_angle": 20,
                     "resolution": 0.1,
+                    "max_sensor_slew": 1,
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
             },
             "states_features": ["a", "e", "i", "raan", "aop", "ta", "pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1", "lat_2", "lon_2", "priority_2"],
-            "actions_features": ["d_az", "d_el"]
+            "actions_features": ["d_pitch", "d_roll"]
         }
     ]
 }

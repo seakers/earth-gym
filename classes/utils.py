@@ -220,12 +220,15 @@ class AttitudeManager():
     """
     def __init__(self, agent):
         self.class_name = "Attitude Manager"
-        self.pitch = agent["initial_pitch"]
-        self.roll = agent["initial_roll"]
+        self.current_pitch = agent["initial_pitch"]
+        self.current_roll = agent["initial_roll"]
+        self.max_slew = agent["max_slew_speed"]
+        self.max_accel = agent["max_slew_accel"]
         if agent["attitude_align"] == "Nadir(Centric)":
             self.align_reference = "Nadir(Centric)"
             self.unallowed_angles = {"pitch": [90, -90]}
-            self.constrained_reference = "Velocity"
+            self.constraint_reference = "Velocity"
+            self.constraint_axes = "1 0 0"
         else:
             raise NotImplementedError("Invalid attitude alignment. Please use 'Nadir(Centric)'.")
 
@@ -238,50 +241,54 @@ class AttitudeManager():
         else:
             raise ValueError(f"Variable {name} does not exist in the class. Check the configuration file.")
         
-    def update_pr(self, delta_pitch, delta_roll):
+    def get_transition_command(self, satellite, time):
         """
-        Update the pitch and roll of the agent within the boundaries.
+        Return the transition command of the agent.
         """
-        self.update_pitch(delta_pitch)
-        self.update_roll(delta_roll)
+        return f"""AddAttitude {satellite.Path} Profile MyProfile "{time}" VariableTimeSlew Mode Constrained SlewSegmentTiming Earliest SlewType 2ndOrderSpline RateMagnitude {self.max_slew} RateAxisX Off RateAxisY Off RateAxisZ Off AccelMagnitude {self.max_accel} AccelAxisX Off AccelAxisY Off AccelAxisZ Off"""
 
-        return self.pitch, self.roll
+    def get_orientation_command(self, satellite, time):
+        """
+        Return the orientation command of the agent.
+        """
+        return f"""AddAttitude {satellite.Path} Profile MyProfile "{time}" AlignConstrain PR {self.current_pitch} {self.current_roll} "Satellite/{satellite.InstanceName} {self.align_reference}" Axis {self.constraint_axes} "Satellite/{satellite.InstanceName} {self.constraint_reference}" """
 
     def update_pitch(self, delta_pitch):
         """
         Update the pitch of the agent within the boundaries.
         """
-        self.pitch += delta_pitch
+        self.current_pitch += delta_pitch
 
-        if "pitch" in self.unallowed_angles.keys() and self.pitch in self.unallowed_angles["pitch"]:
-            self.pitch += 1e-4
+        if "pitch" in self.unallowed_angles.keys() and self.current_pitch in self.unallowed_angles["pitch"]:
+            self.current_pitch += 1e-4
 
         # Correct the pitch if out of boundaries
-        if self.pitch > 90:
-            self.pitch -= 180
-            self.roll += 180
-        elif self.pitch < -90:
-            self.pitch += 180
-            self.roll += 180
+        if self.current_pitch > 90:
+            self.current_pitch -= 180
+            self.current_roll += 180
+        elif self.current_pitch < -90:
+            self.current_pitch += 180
+            self.current_roll += 180
 
-        return self.pitch
+        return self.current_pitch
     
     def update_roll(self, delta_roll):
         """
         Update the roll of the agent within the boundaries.
         """
-        self.roll += delta_roll
+        self.current_roll += delta_roll
 
-        if "roll" in self.unallowed_angles.keys() and self.roll in self.unallowed_angles["roll"]:
-            self.roll += 1e-4
+        if "roll" in self.unallowed_angles.keys() and self.current_roll in self.unallowed_angles["roll"]:
+            self.current_roll += 1e-4
 
         # Correct the roll if out of boundaries
-        if self.roll > 180:
-            self.roll -= 360
-        elif self.roll < -180:
-            self.roll += 360
+        while self.current_roll > 180 or self.current_roll < -180:
+            if self.current_roll > 180:
+                self.current_roll -= 360
+            elif self.current_roll < -180:
+                self.current_roll += 360
 
-        return self.roll
+        return self.current_roll
 
 class SensorManager():
     """
@@ -295,9 +302,14 @@ class SensorManager():
         self.sensor = sensor
         self.pattern = agent["pattern"]
         self.cone_angle = agent["cone_angle"]
-        self.resolution = agent["resolution"]
+        self.max_slew = agent["max_sensor_slew"]
         self.current_azimuth = agent["initial_azimuth"]
         self.current_elevation = agent["initial_elevation"]
+
+        if hasattr(agent, "resolution"):
+            self.resolution = agent["resolution"]
+        else:
+            self.resolution = 0.1
 
     def get_item(self, name):
         """
@@ -554,13 +566,13 @@ class Rewarder():
         self.target_mg = target_mg
         self.agents_config = agents_config
 
-    def calculate_reward(self, data_providers, date_mg: DateManager, slew_rates: list[float]):
+    def calculate_reward(self, data_providers, delta_time: float, date_mg: DateManager, sensor_mg: SensorManager, features_mg: FeaturesManager):
         """
         Return the reward of the state-action pair given the proper data providers (acces and aer).
         """
         reward = 0
 
-        reward += self.slew_constraint(slew_rates)
+        reward += self.slew_constraint(delta_time, sensor_mg, features_mg)
 
         # Iterate over the access data providers
         for access_data_provider, aer_data_provider in data_providers:
@@ -658,13 +670,22 @@ class Rewarder():
         """
         return (1 / n_obs**self.agents_config["reobs_decay"]) if n_obs > 0 else 1
     
-    def slew_constraint(self, slew_rates: list[float]):
+    def slew_constraint(self, delta_time, sensor_mg: SensorManager, features_mg: FeaturesManager):
         """
         Function penalizing the slew rates. Inputs given in the form of a list.
         """
+        # Get the slew rates
         r = 0
-        for slew_rate in slew_rates:
-            r += -10 if slew_rate > self.agents_config["max_slew"] else 5
+        for diff in features_mg.action.keys():
+            if diff in ["d_az", "d_el"]:
+                slew_rate = features_mg.action[diff] / delta_time
+                slew_rate = abs(slew_rate)
+                r += -10 if slew_rate > sensor_mg.max_slew else 5
+            
+            # if diff in ["d_pitch", "d_roll"]:
+            #     slew_rate = features_mg.action[diff] / delta_time
+            #     r += -10 if slew_rate > sensor_mg.max_slew else 5
+
         return r
     
 class Plotter():
