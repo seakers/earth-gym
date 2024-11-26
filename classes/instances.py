@@ -143,9 +143,9 @@ class STKEnvironment():
         # Build the satellites by iterating over the agents
         for i, agent in enumerate(agents_config["agents"]):
             agent = DataFromJSON(agent, "agent").get_dict()
-            satellite, sensor_mg, features_mg = self.build_satellite(agent, self.scenario, i)
+            satellite, sensor_mg, features_mg, attitude_mg = self.build_satellite(agent, self.scenario, i)
             date_mg = DateManager(self.scenario.StartTime, self.scenario.StopTime)
-            self.satellites_tuples.append((satellite, sensor_mg, features_mg, date_mg)) # append the satellite, its sensor manager and its date manager
+            self.satellites_tuples.append((satellite, sensor_mg, features_mg, date_mg, attitude_mg)) # append the satellite, its sensor manager and its date manager
 
     def build_scenario(self, root: AgStkObjectRoot, agents_config) -> IAgStkObject:
         """
@@ -177,31 +177,27 @@ class STKEnvironment():
         self.set_prop_initial_state(prop, agent)
         prop.Propagate()
 
-        # Add a Field of View (FOV) sensor to the satellite
-        cone_angle = agent["cone_angle"]
-
-        # Set the sensor resolution based on the configuration
-        if hasattr(agent, "resolution"):
-            resolution = agent["resolution"]
-        else:
-            resolution = 0.1
-
         # Create the sensor
         sensor = satellite.Children.New(AgESTKObjectType.eSensor, f"{satellite_name}_sensor")
 
-        # Set the sensor pattern based on the configuration
-        if hasattr(agent, "pattern"):
-            self.set_sensor_pattern(sensor, cone_angle, resolution, agent["pattern"])
-        else:
-            self.set_sensor_pattern(sensor, cone_angle, resolution)
-
-        # Add dynamic pointing using azimuth and elevation (custom pointing model)
-        az = agent["initial_azimuth"] # azimuth (coordinate range is 0 to 360)
-        el = agent["initial_elevation"] # elevation (coordinate range is -90 to 90)
-        sensor.CommonTasks.SetPointingFixedAzEl(az, el, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
-        
         # Create the sensor manager
         sensor_mg = SensorManager(agent, sensor)
+
+        # Set the sensor pattern based on the configuration
+        if hasattr(agent, "pattern"):
+            self.set_sensor_pattern(sensor, sensor_mg.cone_angle, sensor_mg.resolution, sensor_mg.pattern)
+        else:
+            self.set_sensor_pattern(sensor, sensor_mg.cone_angle, sensor_mg.resolution)
+
+        # Add static pointing using azimuth and elevation (custom pointing model)
+        sensor.CommonTasks.SetPointingFixedAzEl(sensor_mg.current_azimuth, sensor_mg.current_elevation, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
+
+        # Create the attitude manager
+        attitude_mg = AttitudeManager(agent)
+
+        # Set attitude profile
+        cmd = f"""SetAttitude {satellite.Path} Profile AlignConstrain PR {attitude_mg.current_pitch} {attitude_mg.current_roll} "Satellite/{satellite.InstanceName} {attitude_mg.align_reference}" Axis {attitude_mg.constraint_axes} "Satellite/{satellite.InstanceName} {attitude_mg.constraint_reference}" """
+        self.stk_root.ExecuteCommand(cmd)
 
         # Create the features manager
         features_mg = FeaturesManager(agent)
@@ -213,6 +209,9 @@ class STKEnvironment():
                 if var in ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]:
                     checked_var += ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]
                     pass # These have their own update functions because they are included in the initial state
+                elif var in ["pitch", "roll"]:
+                    features_mg.update_attitude_state(attitude_mg.current_pitch, attitude_mg.current_roll)
+                    checked_var += ["pitch", "roll"]
                 elif var in ["az", "el"]:
                     features_mg.update_sensor_state(sensor_mg.current_azimuth, sensor_mg.current_elevation)
                     checked_var += ["az", "el"]
@@ -227,7 +226,7 @@ class STKEnvironment():
                 else:
                     raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
 
-        return satellite, sensor_mg, features_mg
+        return satellite, sensor_mg, features_mg, attitude_mg
         
     def set_propagator_type(self, satellite):
         """
@@ -405,6 +404,10 @@ class STKEnvironment():
         """
         Forward method. Return the next state and reward based on the current state and action taken.
         """
+        # Check if time is over 0.5 seconds
+        if delta_time < 0.5 and delta_time != 0.0:
+            raise ValueError("Delta time must be at least 0.5 seconds.")
+        
         # Update the agent's features
         done = self.update_agent(agent_id, action, delta_time)
 
@@ -462,27 +465,55 @@ class STKEnvironment():
         Class to update the agent's features based on the action taken and the time passed.
         """
         # Get the satellite tuple
-        satellite, sensor_mg, features_mg, date_mg = self.get_satellite(agent_id)
+        satellite, sensor_mg, features_mg, date_mg, attitude_mg = self.get_satellite(agent_id)
 
-        # Iterate over all actions taken
-        for key in action.keys():
-            # Update the actions in the features manager
-            features_mg.update_action(key, action[key])
+        change_sensor = False
+        change_attitude = False
 
-            # Perform sensor changes
-            if key == "d_az":
-                sensor_mg.update_azimuth(action[key])
-            elif key == "d_el":
-                sensor_mg.update_elevation(action[key])
-            else:
-                raise ValueError("Invalid action. Please use 'd_az' or 'd_el'.")
+        self.stk_root.BeginUpdate()
+
+        if delta_time != 0.0:
+            # Iterate over all actions taken
+            for key in action.keys():
+                # Update the actions in the features manager
+                features_mg.update_action(key, action[key])
+
+                # Perform sensor changes
+                if key == "d_az":
+                    _ = sensor_mg.update_azimuth(action[key])
+                    change_sensor = True
+                elif key == "d_el":
+                    _ = sensor_mg.update_elevation(action[key])
+                    change_sensor = True
+                elif key == "d_pitch":
+                    attitude_mg.update_pitch(action[key])
+                    change_attitude = True
+                elif key == "d_roll":
+                    attitude_mg.update_roll(action[key])
+                    change_attitude = True
+                else:
+                    raise ValueError("Invalid action. Please use 'd_az' or 'd_el'.")
             
-        az = sensor_mg.get_item("current_azimuth")
-        el = sensor_mg.get_item("current_elevation")
-        sensor_mg.sensor.CommonTasks.SetPointingFixedAzEl(az, el, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
+            if change_sensor:
+                az = sensor_mg.get_item("current_azimuth")
+                el = sensor_mg.get_item("current_elevation")
+                sensor_mg.sensor.CommonTasks.SetPointingFixedAzEl(az, el, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
 
-        # Update the date manager
-        date_mg.update_date_after(delta_time)
+            if change_attitude:
+                # Transition command
+                if date_mg.current_date == date_mg.start_date:
+                    cmd = attitude_mg.get_transition_command(satellite, date_mg.get_current_date_after(0.1))
+                else:
+                    cmd = attitude_mg.get_transition_command(satellite, date_mg.current_date)
+                self.stk_root.ExecuteCommand(cmd)
+                # Orientation command
+                cmd = attitude_mg.get_orientation_command(satellite, date_mg.get_current_date_after(delta_time - 0.5))
+                self.stk_root.ExecuteCommand(cmd)
+
+            # Update the date manager
+            date_mg.update_date_after(delta_time)
+
+        self.stk_root.EndUpdate()
 
         # Check if the episode is done
         done = self.check_done(agent_id)
@@ -490,39 +521,42 @@ class STKEnvironment():
         # Return True if the episode is done
         if done:
             return True
-        else:
-            # Find the orbital elements and update the features manager
-            orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, features_mg.agent_config)
 
-            # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
-            checked_var = []
-            for var in features_mg.state.keys():
-                if var not in checked_var:
-                    if var in ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]:
-                        features_mg.update_orbital_elements(orbital_elements)
-                        checked_var += ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]
-                    elif var in ["az", "el"]:
-                        features_mg.update_sensor_state(sensor_mg.current_azimuth, sensor_mg.current_elevation)
-                        checked_var += ["az", "el"]
-                    elif var in ["detic_lat", "detic_lon", "detic_alt"]:
-                        features_mg.update_detic_state(satellite, date_mg.current_date)
-                        checked_var += ["detic_lat", "detic_lon", "detic_alt"]
-                    elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
-                        features_mg.update_target_memory(self.target_mg.df)
-                        target_number = int(var.split("_")[1])
-                        checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
-                        pass
-                    else:
-                        raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
-                    
-            return False
+        # Find the orbital elements and update the features manager
+        orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, features_mg.agent_config)
+
+        # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
+        checked_var = []
+        for var in features_mg.state.keys():
+            if var not in checked_var:
+                if var in ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]:
+                    features_mg.update_orbital_elements(orbital_elements)
+                    checked_var += ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]
+                elif var in ["pitch", "roll"]:
+                    features_mg.update_attitude_state(attitude_mg.current_pitch, attitude_mg.current_roll)
+                    checked_var += ["pitch", "roll"]
+                elif var in ["az", "el"]:
+                    features_mg.update_sensor_state(sensor_mg.current_azimuth, sensor_mg.current_elevation)
+                    checked_var += ["az", "el"]
+                elif var in ["detic_lat", "detic_lon", "detic_alt"]:
+                    features_mg.update_detic_state(satellite, date_mg.current_date)
+                    checked_var += ["detic_lat", "detic_lon", "detic_alt"]
+                elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
+                    features_mg.update_target_memory(self.target_mg.df)
+                    target_number = int(var.split("_")[1])
+                    checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
+                    pass
+                else:
+                    raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
+                
+        return False
 
     def get_state(self, agent_id, as_dict=False):
         """
         Get the state of the agent based on the current features.
         """
         # Get the satellite tuple
-        _, _, features_mg, _ = self.get_satellite(agent_id)
+        _, sensor_mg, features_mg, _, attitude_mg = self.get_satellite(agent_id)
 
         # Get the features of the agent
         state = features_mg.get_state()
@@ -534,7 +568,7 @@ class STKEnvironment():
         Get the reward of the agent based on its state-action pair.
         """
         # Get the satellite tuple
-        satellite, _, features_mg, date_mg = self.get_satellite(agent_id)
+        satellite, sensor_mg, features_mg, date_mg, attitude_mg = self.get_satellite(agent_id)
 
         # Create the rewarder
         rewarder = self.rewarder
@@ -550,6 +584,7 @@ class STKEnvironment():
         if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
             for target in scenario.Children.GetElements(AgESTKObjectType.eTarget):
                 access = sensor.GetAccessToObject(target)
+                access.ComputeAccess()
                 access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
                 aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
                 data_providers.append((access_data_provider, aer_data_provider))
@@ -558,19 +593,13 @@ class STKEnvironment():
         if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
             for target in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget):
                 access = sensor.GetAccessToObject(target)
+                access.ComputeAccess()
                 access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
                 aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
                 data_providers.append((access_data_provider, aer_data_provider))
 
-        # Get the slew rates
-        slew_rates = []
-        for diff in features_mg.action.keys():
-            if diff in ["d_az", "d_el"]:
-                slew_rate = features_mg.action[diff] / delta_time
-                slew_rates.append(abs(slew_rate))
-
         # Call the rewarder to calculate the reward
-        reward = rewarder.calculate_reward(data_providers, date_mg, slew_rates)
+        reward = rewarder.calculate_reward(data_providers, delta_time, date_mg, sensor_mg, features_mg)
 
         return reward
 
@@ -579,7 +608,7 @@ class STKEnvironment():
         Check if the episode is done based on the current date.
         """
         # Get the satellite tuple
-        _, _, _, date_mg = self.get_satellite(agent_id)
+        _, _, _, date_mg, attitude_mg = self.get_satellite(agent_id)
 
         # Check if the simulation time ended
         if date_mg.time_ended():
@@ -587,7 +616,7 @@ class STKEnvironment():
         else:
             return False
     
-    def get_satellite(self, agent_id) -> tuple[IAgStkObject, SensorManager, FeaturesManager, DateManager]:
+    def get_satellite(self, agent_id) -> tuple[IAgStkObject, SensorManager, FeaturesManager, DateManager, AttitudeManager]:
         """
         Get the satellite based on the agent ID.
         """
