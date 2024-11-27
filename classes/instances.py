@@ -133,7 +133,8 @@ class STKEnvironment():
         self.stk_root = stk_root
         self.scenario = self.build_scenario(self.stk_root, self.agents_config)
         self.satellites_tuples = []
-        self.target_mg = TargetManager()
+        self.date_mg = DateManager(self.scenario.StartTime, self.scenario.StopTime)
+        self.target_mg = TargetManager(self.scenario.StartTime, agents_config["visible_targets"])
         self.rewarder = Rewarder(agents_config, self.target_mg)
         self.plotter = Plotter(out_folder_path)
 
@@ -307,9 +308,12 @@ class STKEnvironment():
         self.all_event_zones = pd.read_csv(file_path)
 
         # Draw 100 zones on the scenario map
-        self.draw_n_zones(self.agents_config["visible_targets"], self.all_event_zones, scenario)
+        self.draw_n_zones(self.agents_config["visible_targets"], self.all_event_zones, scenario, scenario.StartTime)
 
-    def draw_n_zones(self, n: int, given_zones: pd.DataFrame, scenario, first_id: int=0):
+        # Copy DataFrame to provisional targets
+        self.target_mg.df_last = self.target_mg.df.copy()
+
+    def draw_n_zones(self, n: int, given_zones: pd.DataFrame, scenario, start_date, first_id: int=0):
         """
         Draw n event zones on the scenario map.
         """
@@ -323,48 +327,54 @@ class STKEnvironment():
 
         # Define specific objects or grid zones to check for coverage
         for i in range(zones.shape[0]):
-            # Get down to 0 if i+first_id is equal to the number of visible targets
-            if i+first_id == self.agents_config["visible_targets"]:
-                first_id = -i
+            # # Get down to 0 if i+first_id is equal to the number of visible targets
+            # if i+first_id == self.agents_config["visible_targets"]:
+            #     first_id = -i
+
+            end_time = self.date_mg.get_current_date_after(float(zones.loc[i, "duration [s]"]))
 
             # See if a certain column exists in the dataframe
             if "lat [deg]" and "lon [deg]" in zones.columns:
                 lat = float(zones.loc[i, "lat [deg]"])
                 lon = float(zones.loc[i, "lon [deg]"])
-                priority = float(zones.loc[i, "priority [1, 10]"])
+                priority = float(zones.loc[i, "priority"])
 
                 # Check if altitude is specified
                 if "alt [m]" in zones.columns:
                     alt = float(zones.loc[i, "lat [deg]"])
-                    self.point_drawing(scenario, i+first_id, lat, lon, priority, alt)
+                    self.point_drawing(scenario, i+first_id, lat, lon, priority, start_date, end_time, alt)
                 else:
-                    self.point_drawing(scenario, i+first_id, lat, lon, priority, alt=0)
+                    self.point_drawing(scenario, i+first_id, lat, lon, priority, start_date, end_time, alt=0)
             elif "lat 1 [deg]" and "lon 1 [deg]" in zones.columns:
                 lats = [float(zones.loc[i, f"lat {j} [deg]"]) for j in range(int(len(zones.columns)))]
                 lons = [float(zones.loc[i, f"lon {j} [deg]"]) for j in range(int(len(zones.columns)))]
-                priority = float(zones.loc[i, "priority [1, 10]"])
-                self.area_drawing(scenario, i+first_id, lats, lons, priority)
+                priority = float(zones.loc[i, "priority"])
+                self.area_drawing(scenario, i+first_id, lats, lons, priority, start_date, end_time)
             else:
                 raise ValueError("The column names for the event zones file is are not recognized. Please use 'lat [deg]' and 'lon [deg]' format or 'lat 1 [deg]', 'lon 1 [deg]', ... format.")
 
-    def point_drawing(self, scenario: IAgStkObject, idx: int, lat, lon, priority, alt=0):
+    def point_drawing(self, scenario: IAgStkObject, idx: int, lat, lon, priority, start_date, end_time, alt=0):
         """
         Draw a point target on the scenario map.
         """
         # Create the point target
         target = scenario.Children.New(AgESTKObjectType.eTarget, f"target{idx}")
         target.Position.AssignGeodetic(lat, lon, alt)
+        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_time}" """
+        self.stk_root.ExecuteCommand(cmd)
 
         # Store the zones
-        self.target_mg.append_zone(f"target{idx}", "Point", lat, lon, priority)
+        self.target_mg.append_zone(f"target{idx}", target, "Point", lat, lon, priority, start_date, end_time)
 
-    def area_drawing(self, scenario, idx: int, lats, lons, priority):
+    def area_drawing(self, scenario, idx: int, lats, lons, priority, start_date, end_time):
         """
         Draw an area target on the scenario map.
         """
         # Create the area target
         target = scenario.Children.New(AgESTKObjectType.eAreaTarget, f"target{idx}")
         target.AreaType = AgEAreaType.ePattern
+        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_time}" """
+        self.stk_root.ExecuteCommand(cmd)
 
         if len(lats) != len(lons):
             raise ValueError("Latitude and longitude lists must have the same length.")
@@ -388,7 +398,7 @@ class STKEnvironment():
         target.AutoCentroid = True
 
         # Store the zones
-        self.target_mg.append_zone(f"target{idx}", "Area", lats[0], lons[0], priority)
+        self.target_mg.append_zone(f"target{idx}", target, "Area", lats[0], lons[0], priority, start_date, end_time)
 
     def delete_object(self, scenario: IAgStkObject, name: str, type: str):
         """
@@ -429,11 +439,23 @@ class STKEnvironment():
         # Store the reward
         self.plotter.store_reward(reward)
 
-        # Delete and draw n zones
-        n = int(delta_time/self.agents_config["target_renew_time"])
-        self.erase_and_draw_zones(n)
+        # # Delete and draw n zones
+        # n = int(delta_time/self.agents_config["target_renew_time"])
+        # self.erase_and_draw_zones(n)
+        self.update_target_zones(agent_id)
 
         return state, reward, done
+    
+    def update_target_zones(self, agent_id):
+        """
+        Update the target zones based on the current date.
+        """
+        # Get the satellite tuple
+        _, _, _, date_mg, _ = self.get_satellite(agent_id)
+
+        # Delete and draw n zones
+        n = self.target_mg.n_of_zones_to_add(date_mg.current_date)
+        self.draw_n_zones(n, self.all_event_zones, self.scenario, date_mg.current_date, self.target_mg.df.shape[0])
     
     def erase_and_draw_zones(self, n):
         """
@@ -580,23 +602,35 @@ class STKEnvironment():
         # minduration-adjusted current date
         adj_current_date = date_mg.get_current_date_after(self.agents_config["min_duration"])
 
-        # Iterate over all point targets
-        if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
-            for target in scenario.Children.GetElements(AgESTKObjectType.eTarget):
-                access = sensor.GetAccessToObject(target)
-                access.ComputeAccess()
-                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
-                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
-                data_providers.append((access_data_provider, aer_data_provider))
+        # # Iterate over all point targets
+        # if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
+        #     for target in scenario.Children.GetElements(AgESTKObjectType.eTarget):
+        #         access = sensor.GetAccessToObject(target)
+        #         access.ComputeAccess()
+        #         access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
+        #         aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
+        #         data_providers.append((access_data_provider, aer_data_provider))
 
-        # Iterate over all area targets
-        if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
-            for target in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget):
-                access = sensor.GetAccessToObject(target)
-                access.ComputeAccess()
-                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
-                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
-                data_providers.append((access_data_provider, aer_data_provider))
+        # # Iterate over all area targets
+        # if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
+        #     for target in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget):
+        #         access = sensor.GetAccessToObject(target)
+        #         access.ComputeAccess()
+        #         access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
+        #         aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
+        #         data_providers.append((access_data_provider, aer_data_provider))
+
+        for _, target in self.target_mg.df.iterrows():
+            if not self.date_mg.is_in_time_range(target["start_time"], target["end_time"], date_mg.last_date):
+                if not self.date_mg.is_in_time_range(target["start_time"], target["end_time"], adj_current_date):
+                    continue
+            access = sensor.GetAccessToObject(target["object"])
+            access.AccessTimePeriod = AgEAccessTimeType.eUserSpecAccessTime
+            access.SpecifyAccessTimePeriod(target["start_time"], target["end_time"])
+            access.ComputeAccess()
+            access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
+            aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
+            data_providers.append((access_data_provider, aer_data_provider))
 
         # Call the rewarder to calculate the reward
         reward = rewarder.calculate_reward(data_providers, delta_time, date_mg, sensor_mg, features_mg)

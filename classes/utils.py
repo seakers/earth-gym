@@ -51,6 +51,23 @@ class DateManager():
         self.current_simplified_date = self.simplify_date(start_date) # all in numbers concatenated in a string
         self.last_simplified_date = self.current_simplified_date
 
+    def is_in_time_range(self, first: str, last: str, current: str):
+        """
+        Check if the current date is in the time range.
+        """
+        first = self.simplify_date(first)
+        last = self.simplify_date(last)
+        current = self.simplify_date(current)
+        return self.num_of_date(first) <= self.num_of_date(current) <= self.num_of_date(last)
+    
+    def is_newer_than(self, first: str, second: str):
+        """
+        Check if the first date is older than the second date.
+        """
+        first = self.simplify_date(first)
+        second = self.simplify_date(second)
+        return self.num_of_date(first) > self.num_of_date(second)
+
     def simplify_date(self, date: str):
         """
         Return the date in a simplified, more readable format.
@@ -467,7 +484,7 @@ class FeaturesManager():
         for i in range(self.target_memory):
             self.update_state(f"lat_{i+1}", seeking_zones["lat [deg]"][i])
             self.update_state(f"lon_{i+1}", seeking_zones["lon [deg]"][i])
-            self.update_state(f"priority_{i+1}", seeking_zones["priority [1, 10]"][i])
+            self.update_state(f"priority_{i+1}", seeking_zones["priority"][i])
         
     def long_name_of(self, short_name):
         """
@@ -487,15 +504,31 @@ class TargetManager():
     """
     Class to manage the targets of the model.
     """
-    def __init__(self):
+    def __init__(self, start_time, n_of_visible_targets):
         self.class_name = "Target Manager"
         self.df = pd.DataFrame()
+        self.df_last = pd.DataFrame()
+        self.date_mg = DateManager(start_time, start_time)
+        self.newest_time = start_time
+        self.n_of_visible_targets = n_of_visible_targets
 
-    def append_zone(self, name: str, type: str, lat: float, lon: float, priority: float, n_obs: int=0, last_seen: str=""):
+    def n_of_zones_to_add(self, time):
+        """
+        Update the zones of the dataframe.
+        """
+        if self.date_mg.is_newer_than(time, self.newest_time):
+            self.newest_time = time
+            self.df_last = self.df_last[self.df_last["numeric_end_date"] >= self.date_mg.num_of_date(self.date_mg.simplify_date(time))]
+            return self.n_of_visible_targets - self.df_last.shape[0]
+            
+        return 0
+
+    def append_zone(self, name: str, target, type: str, lat: float, lon: float, priority: float, start_time: str, end_time: str, n_obs: int=0, last_seen: str=""):
         """
         Append a zone to the dataframe.
         """
-        self.df = self.df._append({"name": name, "type": type, "lat [deg]": lat, "lon [deg]": lon, "priority [1, 10]": priority, "n_obs": n_obs, "last seen": last_seen}, ignore_index=True)
+        self.df = pd.concat([self.df, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
+        self.df_last = pd.concat([self.df_last, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
 
     def erase_first_n_zones(self, n: int):
         """
@@ -531,7 +564,7 @@ class TargetManager():
         """
         Return the priority of the zone.
         """
-        return self.get_zone_by_name(name)["priority [1, 10]"].values[0]
+        return self.get_zone_by_name(name)["priority"].values[0]
 
     def get_zone_by_row(self, i: int) -> pd.DataFrame:
         """
@@ -622,7 +655,7 @@ class Rewarder():
                                 self.target_mg.update_last_seen(event_name, stop_time[j])
 
                                 # This filters concatenated observations (which indeed are one observation)
-                                if not (last_seen - min_duration) >= date_mg.num_of_date(date_mg.simplify_date(start_time[j])): # min_duration added because of added in .Exec() too
+                                if (last_seen - min_duration) >= date_mg.num_of_date(date_mg.simplify_date(start_time[j])): # min_duration added because of added in .Exec() too
                                     break
 
                                 self.target_mg.plus_one_obs(event_name)
