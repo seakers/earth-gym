@@ -331,7 +331,7 @@ class STKEnvironment():
             # if i+first_id == self.agents_config["visible_targets"]:
             #     first_id = -i
 
-            end_time = self.date_mg.get_current_date_after(float(zones.loc[i, "duration [s]"]))
+            end_date = self.date_mg.get_date_after(float(zones.loc[i, "duration [s]"]), start_date)
 
             # See if a certain column exists in the dataframe
             if "lat [deg]" and "lon [deg]" in zones.columns:
@@ -342,38 +342,38 @@ class STKEnvironment():
                 # Check if altitude is specified
                 if "alt [m]" in zones.columns:
                     alt = float(zones.loc[i, "lat [deg]"])
-                    self.point_drawing(scenario, i+first_id, lat, lon, priority, start_date, end_time, alt)
+                    self.point_drawing(scenario, i+first_id, lat, lon, priority, start_date, end_date, alt)
                 else:
-                    self.point_drawing(scenario, i+first_id, lat, lon, priority, start_date, end_time, alt=0)
+                    self.point_drawing(scenario, i+first_id, lat, lon, priority, start_date, end_date, alt=0)
             elif "lat 1 [deg]" and "lon 1 [deg]" in zones.columns:
                 lats = [float(zones.loc[i, f"lat {j} [deg]"]) for j in range(int(len(zones.columns)))]
                 lons = [float(zones.loc[i, f"lon {j} [deg]"]) for j in range(int(len(zones.columns)))]
                 priority = float(zones.loc[i, "priority"])
-                self.area_drawing(scenario, i+first_id, lats, lons, priority, start_date, end_time)
+                self.area_drawing(scenario, i+first_id, lats, lons, priority, start_date, end_date)
             else:
                 raise ValueError("The column names for the event zones file is are not recognized. Please use 'lat [deg]' and 'lon [deg]' format or 'lat 1 [deg]', 'lon 1 [deg]', ... format.")
 
-    def point_drawing(self, scenario: IAgStkObject, idx: int, lat, lon, priority, start_date, end_time, alt=0):
+    def point_drawing(self, scenario: IAgStkObject, idx: int, lat, lon, priority, start_date, end_date, alt=0):
         """
         Draw a point target on the scenario map.
         """
         # Create the point target
         target = scenario.Children.New(AgESTKObjectType.eTarget, f"target{idx}")
         target.Position.AssignGeodetic(lat, lon, alt)
-        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_time}" """
+        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
         self.stk_root.ExecuteCommand(cmd)
 
         # Store the zones
-        self.target_mg.append_zone(f"target{idx}", target, "Point", lat, lon, priority, start_date, end_time)
+        self.target_mg.append_zone(f"target{idx}", target, "Point", lat, lon, priority, start_date, end_date)
 
-    def area_drawing(self, scenario, idx: int, lats, lons, priority, start_date, end_time):
+    def area_drawing(self, scenario, idx: int, lats, lons, priority, start_date, end_date):
         """
         Draw an area target on the scenario map.
         """
         # Create the area target
         target = scenario.Children.New(AgESTKObjectType.eAreaTarget, f"target{idx}")
         target.AreaType = AgEAreaType.ePattern
-        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_time}" """
+        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
         self.stk_root.ExecuteCommand(cmd)
 
         if len(lats) != len(lons):
@@ -398,7 +398,7 @@ class STKEnvironment():
         target.AutoCentroid = True
 
         # Store the zones
-        self.target_mg.append_zone(f"target{idx}", target, "Area", lats[0], lons[0], priority, start_date, end_time)
+        self.target_mg.append_zone(f"target{idx}", target, "Area", lats[0], lons[0], priority, start_date, end_date)
 
     def delete_object(self, scenario: IAgStkObject, name: str, type: str):
         """
@@ -578,7 +578,7 @@ class STKEnvironment():
         Get the state of the agent based on the current features.
         """
         # Get the satellite tuple
-        _, sensor_mg, features_mg, _, attitude_mg = self.get_satellite(agent_id)
+        _, _, features_mg, _, _ = self.get_satellite(agent_id)
 
         # Get the features of the agent
         state = features_mg.get_state()
@@ -590,7 +590,7 @@ class STKEnvironment():
         Get the reward of the agent based on its state-action pair.
         """
         # Get the satellite tuple
-        satellite, sensor_mg, features_mg, date_mg, attitude_mg = self.get_satellite(agent_id)
+        satellite, sensor_mg, features_mg, date_mg, _ = self.get_satellite(agent_id)
 
         # Create the rewarder
         rewarder = self.rewarder
@@ -606,7 +606,6 @@ class STKEnvironment():
         # if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
         #     for target in scenario.Children.GetElements(AgESTKObjectType.eTarget):
         #         access = sensor.GetAccessToObject(target)
-        #         access.ComputeAccess()
         #         access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
         #         aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
         #         data_providers.append((access_data_provider, aer_data_provider))
@@ -615,15 +614,13 @@ class STKEnvironment():
         # if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
         #     for target in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget):
         #         access = sensor.GetAccessToObject(target)
-        #         access.ComputeAccess()
         #         access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
         #         aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
         #         data_providers.append((access_data_provider, aer_data_provider))
 
-        for _, target in self.target_mg.df.iterrows():
-            if not self.date_mg.is_in_time_range(target["start_time"], target["end_time"], date_mg.last_date):
-                if not self.date_mg.is_in_time_range(target["start_time"], target["end_time"], adj_current_date):
-                    continue
+        window_df = self.target_mg.df[self.target_mg.df["numeric_end_date"] >= date_mg.num_of_date(date_mg.simplify_date(date_mg.last_date))]
+
+        for _, target in window_df.iterrows():
             access = sensor.GetAccessToObject(target["object"])
             access.AccessTimePeriod = AgEAccessTimeType.eUserSpecAccessTime
             access.SpecifyAccessTimePeriod(target["start_time"], target["end_time"])
@@ -642,7 +639,7 @@ class STKEnvironment():
         Check if the episode is done based on the current date.
         """
         # Get the satellite tuple
-        _, _, _, date_mg, attitude_mg = self.get_satellite(agent_id)
+        _, _, _, date_mg, _ = self.get_satellite(agent_id)
 
         # Check if the simulation time ended
         if date_mg.time_ended():
