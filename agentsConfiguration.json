@@ -2,10 +2,9 @@
     "general": {
         "scenario_name": "SACTest1",
         "start_time": "1 Jan 2024 00:00:00.000",
-        "stop_time": "1 Jan 2024 03:00:00.000",
+        "stop_time": "1 Jan 2024 02:00:00.000",
         "propagator": "HPOP",
-        "visible_targets": 100,
-        "target_renew_time": 1000000
+        "visible_targets": 100
     },
     "reward_metrics": {
         "min_duration": 0.5,
