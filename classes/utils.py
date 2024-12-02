@@ -133,12 +133,12 @@ class DateManager():
         else:
             return 365
         
-    def get_current_date_after(self, delta_time, return_simplified: bool=False):
+    def get_date_after(self, delta_time, current_date, return_simplified: bool=False):
         """
-        Return the date after the given number of time.
+        Return the date after the given number of days.
         """
         # Get the current date
-        day, month, year, hour, minute, second = self.current_simplified_date.split(" ")
+        day, month, year, hour, minute, second = self.simplify_date(current_date).split(" ")
         day = int(day)
         month = int(month)
         year = int(year)
@@ -179,7 +179,13 @@ class DateManager():
             return simplified
         else:
             return self.fancy_date(simplified)
-
+        
+    def get_current_date_after(self, delta_time, return_simplified: bool=False):
+        """
+        Return the date after the given number of time.
+        """
+        return self.get_date_after(delta_time, self.current_date, return_simplified)
+        
     def update_date_after(self, delta_time):
         """
         Return the date after the given number of days.
@@ -669,6 +675,8 @@ class Rewarder():
                                 ri = self.f_ri(zone_priority, max_zen_angle, 1)
                                 reward += ri
                                 print(f"First observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+
+                        print()
         
         return reward
     
