@@ -528,19 +528,20 @@ class TargetManager():
             return self.n_of_visible_targets - self.df_last.shape[0]
             
         return 0
+    
+    def erase_zone(self, name: str):
+        """
+        Erase a zone from the dataframe.
+        """
+        self.df = self.df[self.df["name"] != name]
+        self.df_last = self.df_last[self.df_last["name"] != name]
 
-    def append_zone(self, name: str, target, type: str, lat: float, lon: float, priority: float, start_time: str, end_time: str, n_obs: int=0, last_seen: str=""):
+    def append_zone(self, name: str, target, type: str, lat: float, lon: float, priority: float, start_time: str, end_time: str, n_obs: int=0, last_seen: str="", erase_first: bool=False):
         """
         Append a zone to the dataframe.
         """
         self.df = pd.concat([self.df, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
         self.df_last = pd.concat([self.df_last, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
-
-    def erase_first_n_zones(self, n: int):
-        """
-        Delete the first n zones from the dataframe.
-        """
-        self.df = pd.DataFrame(self.df.iloc[n:])
 
     def plus_one_obs(self, name: str):
         """
