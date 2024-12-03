@@ -1,8 +1,8 @@
+import os
 import json
 import socket
-import numpy as np
+import psutil
 import pandas as pd
-from datetime import datetime
 
 from agi.stk12.stkengine import STKEngine
 from agi.stk12.stkobjects import *
@@ -71,6 +71,11 @@ class Gym():
         """
         # Plot all the reward graphics available
         self.stk_env.plotter.plot_all()
+
+        # Memory used
+        process = psutil.Process(os.getpid())
+        memory_used = process.memory_info().rss
+        print(f"Memory used: {memory_used / (1024 ** 2):.2f} MB")
     
     def handle_request(self, request):
         """
@@ -468,25 +473,29 @@ class STKEnvironment():
 
         # Delete and draw n zones
         n = self.target_mg.n_of_zones_to_add(date_mg.current_date)
-        self.draw_n_zones(n, self.all_event_zones, self.scenario, date_mg.current_date, self.target_mg.df.shape[0])
+        self.draw_n_zones(n, self.all_event_zones, self.scenario, date_mg.current_date, self.target_mg.max_id)
+        self.unload_expired_zones(self.satellites_tuples, self.scenario, self.target_mg)
 
-        if self.agents_config["deep_training"]:
-            self.unload_expired_zones()
-
-    def unload_expired_zones(self):
+    def unload_expired_zones(self, satellites_tuples: tuple, scenario: IAgStkObject, target_mg: TargetManager):
         """
         Unload the zones which have already expired.
         """
         # Gather the lowest current date of all satellites
-        lowest_current_date = min([self.date_mg.num_of_date(self.date_mg.simplify_date(date_mg.current_date)) for _, _, _, date_mg, _ in self.satellites_tuples])
+        lowest_current_date = min([date_mg.num_of_date(date_mg.simplify_date(date_mg.current_date)) for _, _, _, date_mg, _ in satellites_tuples])
 
-        # Get the zones which are unloadable because they will no longer be visible
-        unloadable_df = self.target_mg.df_last[self.target_mg.df_last["numeric_end_date"] < lowest_current_date]
+        if self.agents_config["deep_training"]:
+            # Get the zones which are unloadable because they will no longer be visible
+            unloadable_df = target_mg.get_unloadable_zones_before(lowest_current_date)
 
-        # Unload the zones
-        for _, row in unloadable_df.iterrows():
-            self.delete_object(self.scenario, row["name"], row["type"])
-            self.target_mg.erase_zone(row["name"])
+            self.stk_root.BeginUpdate()
+
+            # Unload the zones
+            for _, row in unloadable_df.iterrows():
+                self.delete_object(scenario, row["name"], row["type"])
+            
+            self.stk_root.EndUpdate()
+
+        target_mg.unload_zones_before(lowest_current_date)
     
     def update_agent(self, agent_id, action, delta_time):
         """

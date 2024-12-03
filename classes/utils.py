@@ -522,10 +522,10 @@ class TargetManager():
     def __init__(self, start_time, n_of_visible_targets):
         self.class_name = "Target Manager"
         self.df = pd.DataFrame()
-        self.df_last = pd.DataFrame()
         self.date_mg = DateManager(start_time, start_time)
         self.newest_time = start_time
         self.n_of_visible_targets = n_of_visible_targets
+        self.max_id = 0
 
     def n_of_zones_to_add(self, time):
         """
@@ -533,24 +533,35 @@ class TargetManager():
         """
         if self.date_mg.is_newer_than(time, self.newest_time):
             self.newest_time = time
-            self.df_last = self.df_last[self.df_last["numeric_end_date"] >= self.date_mg.num_of_date(self.date_mg.simplify_date(time))]
-            return self.n_of_visible_targets - self.df_last.shape[0]
-            
+            unloadable_df = self.get_unloadable_zones_before(self.date_mg.num_of_date(self.date_mg.simplify_date(time)))
+            return self.n_of_visible_targets - self.df.shape[0] + unloadable_df.shape[0]
+        
         return 0
+    
+    def get_unloadable_zones_before(self, lowest_current_date):
+        """
+        Return the unloadable zones of the dataframe. Lowest current date has to be in single number format.
+        """
+        return self.df[self.df["numeric_end_date"] < lowest_current_date]
+    
+    def unload_zones_before(self, lowest_current_date):
+        """
+        Unload the zones of the dataframe.
+        """
+        self.df = self.df[self.df["numeric_end_date"] >= lowest_current_date]
     
     def erase_zone(self, name: str):
         """
         Erase a zone from the dataframe.
         """
         self.df = self.df[self.df["name"] != name]
-        self.df_last = self.df_last[self.df_last["name"] != name]
 
     def append_zone(self, name: str, target, type: str, lat: float, lon: float, priority: float, start_time: str, end_time: str, n_obs: int=0, last_seen: str="", erase_first: bool=False):
         """
         Append a zone to the dataframe.
         """
         self.df = pd.concat([self.df, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_start_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(start_time))], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
-        self.df_last = pd.concat([self.df_last, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_start_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(start_time))], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
+        self.max_id += 1
 
     def plus_one_obs(self, name: str):
         """
