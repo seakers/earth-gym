@@ -149,8 +149,7 @@ class STKEnvironment():
         # Build the satellites by iterating over the agents
         for i, agent in enumerate(agents_config["agents"]):
             agent = DataFromJSON(agent, "agent").get_dict()
-            satellite, sensor_mg, features_mg, attitude_mg = self.build_satellite(agent, self.scenario, i)
-            date_mg = DateManager(self.scenario.StartTime, self.scenario.StopTime)
+            satellite, sensor_mg, features_mg, date_mg, attitude_mg = self.build_satellite(agent, self.scenario, i)
             self.satellites_tuples.append((satellite, sensor_mg, features_mg, date_mg, attitude_mg)) # append the satellite, its sensor manager and its date manager
 
     def build_scenario(self, root: AgStkObjectRoot, agents_config) -> IAgStkObject:
@@ -166,7 +165,7 @@ class STKEnvironment():
         root.Rewind()
         return scenario
 
-    def build_satellite(self, agent, scenario: IAgStkObject, idx) -> tuple[IAgStkObject, SensorManager, FeaturesManager]:
+    def build_satellite(self, agent, scenario: IAgStkObject, idx) -> tuple[IAgStkObject, SensorManager, FeaturesManager, DateManager, AttitudeManager]:
         """
         Add a satellite to the scenario.
         """
@@ -198,15 +197,18 @@ class STKEnvironment():
         # Add static pointing using azimuth and elevation (custom pointing model)
         sensor.CommonTasks.SetPointingFixedAzEl(sensor_mg.current_azimuth, sensor_mg.current_elevation, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
 
+        # Create the features manager
+        features_mg = FeaturesManager(agent)
+
+        # Create the date manager
+        date_mg = DateManager(scenario.StartTime, scenario.StopTime)
+
         # Create the attitude manager
         attitude_mg = AttitudeManager(agent)
 
         # Set attitude profile
         cmd = f"""SetAttitude {satellite.Path} Profile AlignConstrain PR {attitude_mg.current_pitch} {attitude_mg.current_roll} "Satellite/{satellite.InstanceName} {attitude_mg.align_reference}" Axis {attitude_mg.constraint_axes} "Satellite/{satellite.InstanceName} {attitude_mg.constraint_reference}" """
         self.stk_root.ExecuteCommand(cmd)
-
-        # Create the features manager
-        features_mg = FeaturesManager(agent)
 
         # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
         checked_var = []
@@ -225,14 +227,14 @@ class STKEnvironment():
                     features_mg.update_detic_state(satellite, scenario.StartTime)
                     checked_var += ["detic_lat", "detic_lon", "detic_alt"]
                 elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
-                    features_mg.update_target_memory(self.target_mg.df)
+                    features_mg.update_target_memory(self.target_mg.get_FoR_window_df(satellite, date_mg, margin_pct=0), self.target_mg.df)
                     target_number = int(var.split("_")[1])
                     checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
                     pass
                 else:
                     raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
 
-        return satellite, sensor_mg, features_mg, attitude_mg
+        return satellite, sensor_mg, features_mg, date_mg, attitude_mg
         
     def set_propagator_type(self, satellite):
         """
@@ -447,7 +449,7 @@ class STKEnvironment():
             return state, None, None
 
         # Get the reward
-        reward = self.get_reward(agent_id, self.scenario, delta_time)
+        reward = self.get_reward(agent_id, delta_time)
 
         # Store the reward
         self.plotter.store_reward(reward)
@@ -568,7 +570,7 @@ class STKEnvironment():
                     features_mg.update_detic_state(satellite, date_mg.current_date)
                     checked_var += ["detic_lat", "detic_lon", "detic_alt"]
                 elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
-                    features_mg.update_target_memory(self.target_mg.df)
+                    features_mg.update_target_memory(self.target_mg.get_FoR_window_df(satellite, date_mg, margin_pct=0), self.target_mg.df)
                     target_number = int(var.split("_")[1])
                     checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
                     pass
@@ -589,7 +591,7 @@ class STKEnvironment():
 
         return state if as_dict else [value for value in state.values()]
 
-    def get_reward(self, agent_id, scenario: IAgStkObject, delta_time: float) -> float:
+    def get_reward(self, agent_id, delta_time: float) -> float:
         """
         Get the reward of the agent based on its state-action pair.
         """
@@ -606,29 +608,32 @@ class STKEnvironment():
         # minduration-adjusted current date
         adj_current_date = date_mg.get_current_date_after(self.agents_config["min_duration"])
 
-        # Get the window of targets
-        window_df = self.target_mg.df[self.target_mg.df["numeric_end_date"] >= date_mg.num_of_date(date_mg.simplify_date(date_mg.last_date))]
-        FoR_window_df = window_df.copy()
+        # Get the dataframe filtered on the window and the FoR
+        FoR_window_df = self.target_mg.get_FoR_window_df(satellite=satellite, date_mg=date_mg)
 
-        # Get the satellite's geodetic coordinates (deg, deg, km)
-        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.last_date).DataSets
-        detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0]
-        detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
-        detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
+        # # Get the window of targets
+        # window_df = self.target_mg.df[self.target_mg.df["numeric_end_date"] >= date_mg.num_of_date(date_mg.simplify_date(date_mg.last_date))]
+        # FoR_window_df = window_df.copy()
 
-        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.current_date).DataSets
-        detic_lat = (detic_lat + detic_dataset.GetDataSetByName("Lat").GetValues()[0])/2
-        detic_lon = (detic_lon + detic_dataset.GetDataSetByName("Lon").GetValues()[0])/2
-        detic_alt = (detic_alt + detic_dataset.GetDataSetByName("Alt").GetValues()[0])/2
+        # # Get the satellite's geodetic coordinates (deg, deg, km)
+        # detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.last_date).DataSets
+        # detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0]
+        # detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
+        # detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
 
-        # Find the distance between the satellite's nadir and the targets
-        FoR_window_df["distance"] = window_df.apply(lambda row: self.haversine(detic_lat, detic_lon, row["lat [deg]"], row["lon [deg]"]), axis=1)
+        # detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.current_date).DataSets
+        # detic_lat = (detic_lat + detic_dataset.GetDataSetByName("Lat").GetValues()[0])/2
+        # detic_lon = (detic_lon + detic_dataset.GetDataSetByName("Lon").GetValues()[0])/2
+        # detic_alt = (detic_alt + detic_dataset.GetDataSetByName("Alt").GetValues()[0])/2
 
-        # Calculate the field of regard (km)
-        D_FoR = RT * np.arccos(RT / (RT + detic_alt)) # distance of the field of regard on the ground
+        # # Find the distance between the satellite's nadir and the targets
+        # FoR_window_df["distance"] = window_df.apply(lambda row: self.target_mg.haversine(detic_lat, detic_lon, row["lat [deg]"], row["lon [deg]"]), axis=1)
 
-        # Filter the targets based on the field of regard
-        FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * 1.1] # 10% margin
+        # # Calculate the field of regard (km)
+        # D_FoR = self.target_mg.calculate_D_FoR(detic_alt) # distance of the field of regard on the ground
+
+        # # Filter the targets based on the field of regard
+        # FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * 1.1] # 10% margin
 
         # Iterate over all targets in the window
         for _, target in FoR_window_df.iterrows():
@@ -644,21 +649,6 @@ class STKEnvironment():
         reward = rewarder.calculate_reward(data_providers, delta_time, date_mg, sensor_mg, features_mg)
 
         return reward
-    
-    def haversine(self, lat1, lon1, lat2, lon2):
-        """
-        Calculate the great circle distance between two points on the earth (specified in decimal degrees).
-        """
-        # Convert degrees to radians
-        lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
-
-        # Haversine formula
-        dlat = lat2 - lat1
-        dlon = lon2 - lon1
-        a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
-        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
-
-        return RT * c
 
     def check_done(self, agent_id):
         """

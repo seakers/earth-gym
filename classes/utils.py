@@ -1,7 +1,13 @@
 import os
 import math
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+from agi.stk12.stkobjects import *
+
+# Constants
+RT = 6371  # radius of the earth in km
 
 class DataFromJSON():
     """
@@ -393,7 +399,6 @@ class FeaturesManager():
         self.states_features = agent["states_features"]
         self.actions_features = agent["actions_features"]
         self.target_memory = 0
-        self.current_targets_in_memory = []
 
         # Iterate over the states
         for state in self.states_features:
@@ -479,13 +484,17 @@ class FeaturesManager():
         if "detic_alt" in self.state.keys():
             self.update_state("detic_alt", detic_alt)
 
-    def update_target_memory(self, zones):
+    def update_target_memory(self, preferred_zones, all_zones):
         """
         Update the target memory of the agent.
         """
-        seeking_zones = zones.sample(self.target_memory, ignore_index=True)
-
-        self.current_targets_in_memory = [seeking_zones["name"] for _ in range(self.target_memory)]
+        if not preferred_zones.empty:
+            n_selected = self.target_memory if self.target_memory <= preferred_zones.shape[0] else preferred_zones.shape[0]
+            seeking_zones = preferred_zones.sample(n_selected, ignore_index=True)
+            if n_selected != self.target_memory:
+                seeking_zones = pd.concat([seeking_zones, all_zones.sample(self.target_memory - n_selected, ignore_index=True)], ignore_index=True)
+        else:
+            seeking_zones = all_zones.sample(self.target_memory, ignore_index=True)
 
         for i in range(self.target_memory):
             self.update_state(f"lat_{i+1}", seeking_zones["lat [deg]"][i])
@@ -540,8 +549,8 @@ class TargetManager():
         """
         Append a zone to the dataframe.
         """
-        self.df = pd.concat([self.df, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
-        self.df_last = pd.concat([self.df_last, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
+        self.df = pd.concat([self.df, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_start_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(start_time))], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
+        self.df_last = pd.concat([self.df_last, pd.DataFrame({"name": [name], "object": [target], "type": [type], "lat [deg]": [lat], "lon [deg]": [lon], "priority": [priority], "start_time": [start_time], "end_time": [end_time], "numeric_start_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(start_time))], "numeric_end_date": [self.date_mg.num_of_date(self.date_mg.simplify_date(end_time))], "n_obs": [n_obs], "last seen": [last_seen]})], ignore_index=True)
 
     def plus_one_obs(self, name: str):
         """
@@ -591,6 +600,72 @@ class TargetManager():
             raise ValueError(f"Zone {name} found multiple times in the dataframe.")
         
         return zone
+    
+    def get_FoR_window_df(self, satellite: IAgStkObject, date_mg: DateManager, margin_pct: float=10) -> pd.DataFrame:
+        """
+        Return the Field of Regard (FoR) window dataframe.
+        """
+        # Get the window of targets
+        FoR_window_df = self.df[self.df["numeric_end_date"] >= date_mg.num_of_date(date_mg.simplify_date(date_mg.last_date))]
+        FoR_window_df = FoR_window_df[FoR_window_df["numeric_start_date"] <= date_mg.num_of_date(date_mg.simplify_date(date_mg.current_date))]
+
+        # Get the satellite's geodetic coordinates (deg, deg, km)
+        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.last_date).DataSets
+        detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0]
+        detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
+        detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
+
+        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.current_date).DataSets
+        detic_lat = (detic_lat + detic_dataset.GetDataSetByName("Lat").GetValues()[0])/2
+        detic_lon = (detic_lon + detic_dataset.GetDataSetByName("Lon").GetValues()[0])/2
+        detic_alt = (detic_alt + detic_dataset.GetDataSetByName("Alt").GetValues()[0])/2
+
+        # Find the distance between the satellite's nadir and the targets
+        FoR_window_df["distance"] = FoR_window_df.apply(lambda row: self.haversine(detic_lat, detic_lon, row["lat [deg]"], row["lon [deg]"]), axis=1)
+
+        # Calculate the field of regard (km)
+        D_FoR = self.calculate_D_FoR(detic_alt) # distance of the field of regard on the ground
+
+        # Filter the targets based on the field of regard
+        FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * (1 + margin_pct/100)] # 10% margin
+
+        return FoR_window_df
+    
+    def get_FoR_zones(self, satellite_lat: float, satellite_lon: float, altitude: float, FoR: float):
+        """
+        Return the zones within the Field of Regard (FoR).
+        """
+        zones = []
+        for i in range(self.df.shape[0]):
+            zone = self.get_zone_by_row(i)
+            zone_lat = zone["lat [deg]"].values[0]
+            zone_lon = zone["lon [deg]"].values[0]
+            distance = self.haversine(satellite_lat, satellite_lon, zone_lat, zone_lon)
+            if distance <= FoR:
+                zones.append(zone)
+        
+        return zones
+    
+    def calculate_D_FoR(self, altitude: float):
+        """
+        Calculate the distance of the Field of Regard (FoR).
+        """
+        return RT * np.arccos(RT / (RT + altitude))
+    
+    def haversine(self, lat1, lon1, lat2, lon2):
+        """
+        Calculate the great circle distance between two points on the earth (specified in decimal degrees).
+        """
+        # Convert degrees to radians
+        lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+
+        # Haversine formula
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+
+        return RT * c
 
 class Rewarder():
     """
