@@ -645,8 +645,7 @@ class STKEnvironment():
             FoR_window_df["distance"] = window_df.apply(lambda row: self.haversine(detic_lat, detic_lon, row["lat [deg]"], row["lon [deg]"]), axis=1)
 
             # Calculate the field of regard
-            theta_max = np.arcsin(RT / (RT + detic_alt)) # maximum angle of view (no limitation by the satellite)
-            D_FoR = RT * np.arccos((RT / (RT + detic_alt)) * np.cos(theta_max)) # distance of the field of regard on the ground
+            D_FoR = RT * np.arccos(RT / (RT + detic_alt)) # distance of the field of regard on the ground
 
             # Filter the targets based on the field of regard
             FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * 1.1] # 10% margin
