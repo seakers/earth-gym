@@ -88,7 +88,8 @@ class Gym():
             state, reward, done = self.get_next_state_and_reward(request_data["agent_id"], request_data["action"], request_data["delta_time"])
             return json.dumps({"state": state, "reward": reward, "done": done})
         elif request_data["command"] == "shutdown":
-            self.stk_env.stk_root.SaveScenario()
+            if not self.stk_env.agents_config["deep_training"]:
+                self.stk_env.stk_root.SaveScenario()
             self.generate_output()
             self.running = False
             return json.dumps({"status": "shutdown_complete"})
@@ -361,9 +362,8 @@ class STKEnvironment():
         target = scenario.Children.New(AgESTKObjectType.eTarget, f"target{idx}")
         target.Position.AssignGeodetic(lat, lon, alt)
 
-        if not self.agents_config["quick_mode"]:
-            cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
-            self.stk_root.ExecuteCommand(cmd)
+        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
+        self.stk_root.ExecuteCommand(cmd)
 
         self.stk_root.EndUpdate()
 
@@ -380,9 +380,8 @@ class STKEnvironment():
         target = scenario.Children.New(AgESTKObjectType.eAreaTarget, f"target{idx}")
         target.AreaType = AgEAreaType.ePattern
 
-        if not self.agents_config["quick_mode"]:
-            cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
-            self.stk_root.ExecuteCommand(cmd)
+        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
+        self.stk_root.ExecuteCommand(cmd)
         
         self.stk_root.EndUpdate()
 
@@ -469,7 +468,7 @@ class STKEnvironment():
         n = self.target_mg.n_of_zones_to_add(date_mg.current_date)
         self.draw_n_zones(n, self.all_event_zones, self.scenario, date_mg.current_date, self.target_mg.df.shape[0])
 
-        if self.agents_config["quick_mode"]:
+        if self.agents_config["deep_training"]:
             self.unload_expired_zones()
 
     def unload_expired_zones(self):
@@ -607,58 +606,39 @@ class STKEnvironment():
         # minduration-adjusted current date
         adj_current_date = date_mg.get_current_date_after(self.agents_config["min_duration"])
 
-        if self.agents_config["quick_mode"]:
-            # Iterate over all point targets
-            if scenario.Children.GetElements(AgESTKObjectType.eTarget) is not None:
-                for target in scenario.Children.GetElements(AgESTKObjectType.eTarget):
-                    access = sensor.GetAccessToObject(target)
-                    access.ComputeAccess()
-                    access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
-                    aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
-                    data_providers.append((access_data_provider, aer_data_provider))
+        # Get the window of targets
+        window_df = self.target_mg.df[self.target_mg.df["numeric_end_date"] >= date_mg.num_of_date(date_mg.simplify_date(date_mg.last_date))]
+        FoR_window_df = window_df.copy()
 
-            # Iterate over all area targets
-            if scenario.Children.GetElements(AgESTKObjectType.eAreaTarget) is not None:
-                for target in scenario.Children.GetElements(AgESTKObjectType.eAreaTarget):
-                    access = sensor.GetAccessToObject(target)
-                    access.ComputeAccess()
-                    access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
-                    aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
-                    data_providers.append((access_data_provider, aer_data_provider))
-        else:
-            # Get the window of targets
-            window_df = self.target_mg.df[self.target_mg.df["numeric_end_date"] >= date_mg.num_of_date(date_mg.simplify_date(date_mg.last_date))]
-            FoR_window_df = window_df.copy()
+        # Get the satellite's geodetic coordinates (deg, deg, km)
+        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.last_date).DataSets
+        detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0]
+        detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
+        detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
 
-            # Get the satellite's geodetic coordinates
-            detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.last_date).DataSets
-            detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0] # Group Items --> 0: TrueOfDateRotating, 1: Fixed
-            detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
-            detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
+        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.current_date).DataSets
+        detic_lat = (detic_lat + detic_dataset.GetDataSetByName("Lat").GetValues()[0])/2
+        detic_lon = (detic_lon + detic_dataset.GetDataSetByName("Lon").GetValues()[0])/2
+        detic_alt = (detic_alt + detic_dataset.GetDataSetByName("Alt").GetValues()[0])/2
 
-            detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.current_date).DataSets
-            detic_lat = (detic_lat + detic_dataset.GetDataSetByName("Lat").GetValues()[0])/2
-            detic_lon = (detic_lon + detic_dataset.GetDataSetByName("Lon").GetValues()[0])/2
-            detic_alt = (detic_alt + detic_dataset.GetDataSetByName("Alt").GetValues()[0])/2
+        # Find the distance between the satellite's nadir and the targets
+        FoR_window_df["distance"] = window_df.apply(lambda row: self.haversine(detic_lat, detic_lon, row["lat [deg]"], row["lon [deg]"]), axis=1)
 
-            # Find the distance between the satellite's nadir and the targets
-            FoR_window_df["distance"] = window_df.apply(lambda row: self.haversine(detic_lat, detic_lon, row["lat [deg]"], row["lon [deg]"]), axis=1)
+        # Calculate the field of regard (km)
+        D_FoR = RT * np.arccos(RT / (RT + detic_alt)) # distance of the field of regard on the ground
 
-            # Calculate the field of regard
-            D_FoR = RT * np.arccos(RT / (RT + detic_alt)) # distance of the field of regard on the ground
+        # Filter the targets based on the field of regard
+        FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * 1.1] # 10% margin
 
-            # Filter the targets based on the field of regard
-            FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * 1.1] # 10% margin
-
-            # Iterate over all targets in the window
-            for _, target in FoR_window_df.iterrows():
-                access = sensor.GetAccessToObject(target["object"])
-                access.AccessTimePeriod = AgEAccessTimeType.eUserSpecAccessTime
-                access.SpecifyAccessTimePeriod(target["start_time"], target["end_time"])
-                access.ComputeAccess()
-                access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
-                aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
-                data_providers.append((access_data_provider, aer_data_provider))
+        # Iterate over all targets in the window
+        for _, target in FoR_window_df.iterrows():
+            access = sensor.GetAccessToObject(target["object"])
+            access.AccessTimePeriod = AgEAccessTimeType.eUserSpecAccessTime
+            access.SpecifyAccessTimePeriod(target["start_time"], target["end_time"])
+            access.ComputeAccess()
+            access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
+            aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
+            data_providers.append((access_data_provider, aer_data_provider))
 
         # Call the rewarder to calculate the reward
         reward = rewarder.calculate_reward(data_providers, delta_time, date_mg, sensor_mg, features_mg)

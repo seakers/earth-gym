@@ -2,10 +2,10 @@
     "general": {
         "scenario_name": "SAC",
         "start_time": "1 Jan 2024 00:00:00.000",
-        "stop_time": "1 Jan 2024 00:50:00.000",
+        "stop_time": "1 Jan 2024 05:00:00.000",
         "propagator": "HPOP",
         "visible_targets": 100,
-        "quick_mode": false
+        "deep_training": false
     },
     "reward_metrics": {
         "min_duration": 0.5,
