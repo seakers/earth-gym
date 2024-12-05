@@ -46,6 +46,20 @@
                 "--port", "5555",
                 "--save", "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\sac-transformer-EOS\\trained",
             ]
+        },
+        {
+            "name": "RL",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\rl-transformer-EOS\\main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "python": "C:\\Users\\gerardmr\\.conda\\envs\\sac\\python",
+            "args": [
+                "--host", "localhost",
+                "--port", "5555",
+                "--save", "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\rl-transformer-EOS\\trained",
+            ]
         }
     ],
     "compounds": [
@@ -56,6 +70,10 @@
         {
             "name": "Train SAC",
             "configurations": ["Gym", "SAC"]
+        },
+        {
+            "name": "Train RL",
+            "configurations": ["Gym", "RL"]
         }
     ]
 }
