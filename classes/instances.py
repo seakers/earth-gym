@@ -617,7 +617,7 @@ class STKEnvironment():
         Get the reward of the agent based on its state-action pair.
         """
         # Get the satellite tuple
-        satellite, sensor_mg, features_mg, date_mg, _ = self.get_satellite(agent_id)
+        satellite, sensor_mg, features_mg, date_mg, attitude_mg = self.get_satellite(agent_id)
 
         # Create the rewarder
         rewarder = self.rewarder
@@ -643,7 +643,7 @@ class STKEnvironment():
             data_providers.append((access_data_provider, aer_data_provider))
 
         # Call the rewarder to calculate the reward
-        reward = rewarder.calculate_reward(data_providers, delta_time, date_mg, sensor_mg, features_mg)
+        reward = rewarder.calculate_reward(data_providers, delta_time, date_mg, sensor_mg, features_mg, attitude_mg.angle_domains)
 
         return reward
 

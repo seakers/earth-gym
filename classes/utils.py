@@ -255,6 +255,7 @@ class AttitudeManager():
         self.max_accel = agent["max_slew_accel"]
         if agent["attitude_align"] == "Nadir(Centric)":
             self.align_reference = "Nadir(Centric)"
+            self.angle_domains = {"pitch": [-90, 90], "roll": [-180, 180]}
             self.unallowed_angles = {"pitch": [90, -90]}
             self.constraint_reference = "Velocity"
             self.constraint_axes = "1 0 0"
@@ -707,13 +708,13 @@ class Rewarder():
         self.target_mg = target_mg
         self.agents_config = agents_config
 
-    def calculate_reward(self, data_providers, delta_time: float, date_mg: DateManager, sensor_mg: SensorManager, features_mg: FeaturesManager):
+    def calculate_reward(self, data_providers, delta_time: float, date_mg: DateManager, sensor_mg: SensorManager, features_mg: FeaturesManager, angle_domains: dict):
         """
         Return the reward of the state-action pair given the proper data providers (acces and aer).
         """
         reward = 0
 
-        reward += self.slew_constraint(delta_time, sensor_mg, features_mg)
+        reward += self.slew_constraint(delta_time, sensor_mg, features_mg, angle_domains)
 
         # Iterate over the access data providers
         for access_data_provider, aer_data_provider in data_providers:
@@ -811,9 +812,9 @@ class Rewarder():
         """
         return (1 / n_obs**self.agents_config["reobs_decay"]) if n_obs > 0 else 1
     
-    def slew_constraint(self, delta_time, sensor_mg: SensorManager, features_mg: FeaturesManager):
+    def slew_constraint(self, delta_time, sensor_mg: SensorManager, features_mg: FeaturesManager, angle_domains: dict):
         """
-        Function penalizing the slew rates. Inputs given in the form of a list.
+        Function penalizing the slew rates and the movement of the agent. Inputs given in the form of a list.
         """
         # Get the slew rates
         r = 0
@@ -822,10 +823,10 @@ class Rewarder():
                 slew_rate = features_mg.action[diff] / delta_time
                 slew_rate = abs(slew_rate)
                 r += -10 if slew_rate > sensor_mg.max_slew else 5
-            
-            # if diff in ["d_pitch", "d_roll"]:
-            #     slew_rate = features_mg.action[diff] / delta_time
-            #     r += -10 if slew_rate > sensor_mg.max_slew else 5
+
+            # Penalize for simply moving
+            key = diff.split("_")[1]
+            r += -5*features_mg.action[diff]/(angle_domains[key][1] - angle_domains[key][0])
 
         return r
     

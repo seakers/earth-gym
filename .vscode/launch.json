@@ -15,7 +15,7 @@
             "args": [
                 "--host", "localhost",
                 "--port", "5555",
-                "--conf", "${workspaceFolder}\\agentsConfiguration.json",
+                "--conf", "${workspaceFolder}\\agents-configuration.json",
                 "--evpt", "${workspaceFolder}\\eventZones.csv",
                 "--out", "${workspaceFolder}\\output"
             ]
