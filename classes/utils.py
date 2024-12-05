@@ -260,6 +260,8 @@ class AttitudeManager():
             self.constraint_axes = "1 0 0"
         else:
             raise NotImplementedError("Invalid attitude alignment. Please use 'Nadir(Centric)'.")
+        
+        self.previous_orientation_cmd = None
 
     def get_item(self, name):
         """
@@ -270,17 +272,30 @@ class AttitudeManager():
         else:
             raise ValueError(f"Variable {name} does not exist in the class. Check the configuration file.")
         
+    def get_clear_data_command(self, satellite):
+        """
+        Return the clear data command of the agent.
+        """
+        return f"SetAttitude {satellite.Path} ClearData AllProfiles"
+        
     def get_transition_command(self, satellite, time):
         """
         Return the transition command of the agent.
         """
         return f"""AddAttitude {satellite.Path} Profile MyProfile "{time}" VariableTimeSlew Mode Constrained SlewSegmentTiming Earliest SlewType 2ndOrderSpline RateMagnitude {self.max_slew} RateAxisX Off RateAxisY Off RateAxisZ Off AccelMagnitude {self.max_accel} AccelAxisX Off AccelAxisY Off AccelAxisZ Off"""
 
-    def get_orientation_command(self, satellite, time):
+    def get_new_orientation_command(self, satellite, time):
         """
         Return the orientation command of the agent.
         """
-        return f"""AddAttitude {satellite.Path} Profile MyProfile "{time}" AlignConstrain PR {self.current_pitch} {self.current_roll} "Satellite/{satellite.InstanceName} {self.align_reference}" Axis {self.constraint_axes} "Satellite/{satellite.InstanceName} {self.constraint_reference}" """
+        self.previous_orientation_cmd = f"""AddAttitude {satellite.Path} Profile MyProfile "{time}" AlignConstrain PR {self.current_pitch} {self.current_roll} "Satellite/{satellite.InstanceName} {self.align_reference}" Axis {self.constraint_axes} "Satellite/{satellite.InstanceName} {self.constraint_reference}" """
+        return self.previous_orientation_cmd
+    
+    def get_previous_orientation_command(self):
+        """
+        Return the previous orientation command of the agent.
+        """
+        return self.previous_orientation_cmd
 
     def update_pitch(self, delta_pitch):
         """
@@ -469,7 +484,7 @@ class FeaturesManager():
         if "el" in self.state.keys():
             self.update_state("el", el)
         
-    def update_detic_state(self, satellite, time):
+    def update_detic_state(self, satellite: IAgStkObject, time: str):
         """
         Update the LLA state of the agent.
         """
@@ -748,14 +763,12 @@ class Rewarder():
                                 self.target_mg.update_last_seen(event_name, stop_time[j])
 
                                 # This filters concatenated observations (which indeed are one observation)
-                                if (last_seen - min_duration) >= date_mg.num_of_date(date_mg.simplify_date(start_time[j])): # min_duration added because of added in .Exec() too
-                                    break
-
-                                self.target_mg.plus_one_obs(event_name)
-                                n_obs = self.target_mg.get_n_obs(event_name)
-                                ri = self.f_ri(zone_priority, max_zen_angle, n_obs)
-                                reward += ri
-                                print(f"Observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+                                if (last_seen - min_duration) < date_mg.num_of_date(date_mg.simplify_date(start_time[j])): # min_duration added because of added in .Exec() too
+                                    self.target_mg.plus_one_obs(event_name)
+                                    n_obs = self.target_mg.get_n_obs(event_name)
+                                    ri = self.f_ri(zone_priority, max_zen_angle, n_obs)
+                                    reward += ri
+                                    print(f"Observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
                             else:
                                 self.target_mg.plus_one_obs(event_name)
                                 self.target_mg.update_last_seen(event_name, stop_time[j])
@@ -763,7 +776,7 @@ class Rewarder():
                                 reward += ri
                                 print(f"First observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
 
-                        print()
+                    print()
         
         return reward
     

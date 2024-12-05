@@ -3,6 +3,7 @@ import json
 import socket
 import psutil
 import pandas as pd
+from time import perf_counter
 
 from agi.stk12.stkengine import STKEngine
 from agi.stk12.stkobjects import *
@@ -537,14 +538,26 @@ class STKEnvironment():
                 sensor_mg.sensor.CommonTasks.SetPointingFixedAzEl(az, el, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
 
             if change_attitude:
-                # Transition command
                 if date_mg.current_date == date_mg.start_date:
+                    # Transition command
                     cmd = attitude_mg.get_transition_command(satellite, date_mg.get_current_date_after(0.1))
+                    self.stk_root.ExecuteCommand(cmd)
                 else:
+                    if self.agents_config["deep_training"]:
+                        # First, clear all but the last attitude command
+                        cmd = attitude_mg.get_clear_data_command(satellite)
+                        self.stk_root.ExecuteCommand(f"SetAttitude {satellite.Path} ClearData AllProfiles")
+                        
+                        # Then, add the previous orientation command
+                        cmd = attitude_mg.get_previous_orientation_command()
+                        self.stk_root.ExecuteCommand(cmd)
+
+                    # Transition command
                     cmd = attitude_mg.get_transition_command(satellite, date_mg.current_date)
-                self.stk_root.ExecuteCommand(cmd)
+                    self.stk_root.ExecuteCommand(cmd)
+
                 # Orientation command
-                cmd = attitude_mg.get_orientation_command(satellite, date_mg.get_current_date_after(delta_time - 0.5))
+                cmd = attitude_mg.get_new_orientation_command(satellite, date_mg.get_current_date_after(delta_time - 0.5))
                 self.stk_root.ExecuteCommand(cmd)
 
             # Update the date manager
@@ -582,10 +595,9 @@ class STKEnvironment():
                     features_mg.update_target_memory(self.target_mg.get_FoR_window_df(satellite, date_mg, margin_pct=0), self.target_mg.df)
                     target_number = int(var.split("_")[1])
                     checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
-                    pass
                 else:
                     raise ValueError(f"State feature {var} not recognized. Please use orbital features, 'az', 'el', 'detic_lat', 'detic_lon' or 'detic_alt'.")
-                
+
         return False
 
     def get_state(self, agent_id, as_dict=False):
@@ -619,30 +631,6 @@ class STKEnvironment():
 
         # Get the dataframe filtered on the window and the FoR
         FoR_window_df = self.target_mg.get_FoR_window_df(satellite=satellite, date_mg=date_mg)
-
-        # # Get the window of targets
-        # window_df = self.target_mg.df[self.target_mg.df["numeric_end_date"] >= date_mg.num_of_date(date_mg.simplify_date(date_mg.last_date))]
-        # FoR_window_df = window_df.copy()
-
-        # # Get the satellite's geodetic coordinates (deg, deg, km)
-        # detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.last_date).DataSets
-        # detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0]
-        # detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
-        # detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
-
-        # detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.current_date).DataSets
-        # detic_lat = (detic_lat + detic_dataset.GetDataSetByName("Lat").GetValues()[0])/2
-        # detic_lon = (detic_lon + detic_dataset.GetDataSetByName("Lon").GetValues()[0])/2
-        # detic_alt = (detic_alt + detic_dataset.GetDataSetByName("Alt").GetValues()[0])/2
-
-        # # Find the distance between the satellite's nadir and the targets
-        # FoR_window_df["distance"] = window_df.apply(lambda row: self.target_mg.haversine(detic_lat, detic_lon, row["lat [deg]"], row["lon [deg]"]), axis=1)
-
-        # # Calculate the field of regard (km)
-        # D_FoR = self.target_mg.calculate_D_FoR(detic_alt) # distance of the field of regard on the ground
-
-        # # Filter the targets based on the field of regard
-        # FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * 1.1] # 10% margin
 
         # Iterate over all targets in the window
         for _, target in FoR_window_df.iterrows():

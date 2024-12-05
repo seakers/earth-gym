@@ -2,7 +2,7 @@
     "general": {
         "scenario_name": "SAC",
         "start_time": "1 Jan 2024 00:00:00.000",
-        "stop_time": "1 Jan 2024 05:00:00.000",
+        "stop_time": "1 Jan 2024 04:00:00.000",
         "propagator": "HPOP",
         "visible_targets": 100,
         "deep_training": false
@@ -22,6 +22,68 @@
                     "a": 7000,
                     "e": 0,
                     "i": 0,
+                    "raan": 0,
+                    "aop": 0,
+                    "ta": 0
+                }
+            },
+            "attitude": {
+                "initial_pitch": 0,
+                "initial_roll": 0,
+                "attitude_align": "Nadir(Centric)",
+                "max_slew_speed": 50,
+                "max_slew_accel": 2
+            },
+            "sensor": {
+                    "pattern": "Simple Conic",
+                    "cone_angle": 20,
+                    "resolution": 0.1,
+                    "max_sensor_slew": 1,
+                    "initial_azimuth": 0.0,
+                    "initial_elevation": 90.0
+            },
+            "states_features": ["a", "e", "i", "raan", "aop", "ta", "pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1", "lat_2", "lon_2", "priority_2"],
+            "actions_features": ["d_pitch", "d_roll"]
+        },
+        {
+            "position": {
+                "reference_frame": "ICRF",
+                "coordinate_system": "Classical",
+                "initial_orbital_elements": {
+                    "a": 7000,
+                    "e": 0,
+                    "i": 60,
+                    "raan": 0,
+                    "aop": 0,
+                    "ta": 0
+                }
+            },
+            "attitude": {
+                "initial_pitch": 0,
+                "initial_roll": 0,
+                "attitude_align": "Nadir(Centric)",
+                "max_slew_speed": 50,
+                "max_slew_accel": 2
+            },
+            "sensor": {
+                    "pattern": "Simple Conic",
+                    "cone_angle": 20,
+                    "resolution": 0.1,
+                    "max_sensor_slew": 1,
+                    "initial_azimuth": 0.0,
+                    "initial_elevation": 90.0
+            },
+            "states_features": ["a", "e", "i", "raan", "aop", "ta", "pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1", "lat_2", "lon_2", "priority_2"],
+            "actions_features": ["d_pitch", "d_roll"]
+        },
+        {
+            "position": {
+                "reference_frame": "ICRF",
+                "coordinate_system": "Classical",
+                "initial_orbital_elements": {
+                    "a": 7000,
+                    "e": 0,
+                    "i": 120,
                     "raan": 0,
                     "aop": 0,
                     "ta": 0
