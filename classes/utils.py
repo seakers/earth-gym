@@ -826,7 +826,9 @@ class Rewarder():
 
             # Penalize for simply moving
             key = diff.split("_")[1]
-            r += -5*features_mg.action[diff]/(angle_domains[key][1] - angle_domains[key][0])
+            movement = abs(features_mg.action[diff])
+            domain = abs(angle_domains[key][1] - angle_domains[key][0])
+            r += -5*movement/domain
 
         return r
     
