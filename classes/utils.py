@@ -770,12 +770,16 @@ class Rewarder():
                                     ri = self.f_ri(zone_priority, max_zen_angle, n_obs)
                                     reward += ri
                                     print(f"Observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+                                else:
+                                    print(f"Observation of {event_name} not counted because it belongs to a previous one.")
                             else:
                                 self.target_mg.plus_one_obs(event_name)
                                 self.target_mg.update_last_seen(event_name, stop_time[j])
                                 ri = self.f_ri(zone_priority, max_zen_angle, 1)
                                 reward += ri
                                 print(f"First observed {event_name} with zenith {max_zen_angle:0.2f}º and reward of {ri:0.4f} (total of {reward:0.4f}).")
+                        else:
+                            print(f"Observation of {event_name} has insufficient duration.")
 
                     print()
         
@@ -828,7 +832,7 @@ class Rewarder():
             key = diff.split("_")[1]
             movement = abs(features_mg.action[diff])
             domain = abs(angle_domains[key][1] - angle_domains[key][0])
-            r += -5*movement/domain
+            r += -movement/domain
 
         return r
     

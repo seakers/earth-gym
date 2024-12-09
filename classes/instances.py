@@ -544,13 +544,20 @@ class STKEnvironment():
                     self.stk_root.ExecuteCommand(cmd)
                 else:
                     if self.agents_config["deep_training"]:
-                        # First, clear all but the last attitude command
-                        cmd = attitude_mg.get_clear_data_command(satellite)
-                        self.stk_root.ExecuteCommand(f"SetAttitude {satellite.Path} ClearData AllProfiles")
-                        
-                        # Then, add the previous orientation command
-                        cmd = attitude_mg.get_previous_orientation_command()
-                        self.stk_root.ExecuteCommand(cmd)
+                        # Get the attitude profile
+                        cmd = f"""GetAttitude {satellite.Path} Segments"""
+
+                        # Execute the command
+                        segments = self.stk_root.ExecuteCommand(cmd)
+
+                        if segments.Count > 12: # number obtained from testing study
+                            # First, clear all but the last attitude command
+                            cmd = attitude_mg.get_clear_data_command(satellite)
+                            self.stk_root.ExecuteCommand(f"SetAttitude {satellite.Path} ClearData AllProfiles")
+                            
+                            # Then, add the previous orientation command
+                            cmd = attitude_mg.get_previous_orientation_command()
+                            self.stk_root.ExecuteCommand(cmd)
 
                     # Transition command
                     cmd = attitude_mg.get_transition_command(satellite, date_mg.current_date)
