@@ -569,7 +569,8 @@ class STKEnvironment():
 
             # Update the date manager
             date_mg.update_date_after(delta_time)
-            print(f"Current date: {date_mg.current_date}")
+            if self.agents_config["debug"]:
+                print(f"Current date: {date_mg.current_date}")
 
         self.stk_root.EndUpdate()
 
