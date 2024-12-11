@@ -8,15 +8,18 @@
             "name": "Gym",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}\\main.py",
+            "program": "${workspaceFolder}\\src\\main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "python": "C:\\Users\\gerardmr\\.conda\\envs\\earth-gym\\python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
             "args": [
                 "--host", "localhost",
                 "--port", "5555",
-                "--conf", "${workspaceFolder}\\agents-configuration.json",
-                "--evpt", "${workspaceFolder}\\eventZones.csv",
+                "--conf", "${workspaceFolder}\\src\\agents-configuration.json",
+                "--evpt", "${workspaceFolder}\\data\\random-points.csv",
                 "--out", "${workspaceFolder}\\output"
             ]
         },
@@ -24,7 +27,7 @@
             "name": "Example",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}\\.info\\example_agent.py",
+            "program": "${workspaceFolder}\\docs\\example_agent.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "python": "C:\\Users\\gerardmr\\.conda\\envs\\myenv\\python",
