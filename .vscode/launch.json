@@ -24,10 +24,10 @@
             ]
         },
         {
-            "name": "Example",
+            "name": "Demo",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}\\docs\\example_agent.py",
+            "program": "${workspaceFolder}\\docs\\demo.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "python": "C:\\Users\\gerardmr\\.conda\\envs\\myenv\\python",
@@ -67,8 +67,8 @@
     ],
     "compounds": [
         {
-            "name": "Train Example",
-            "configurations": ["Gym", "Example"]
+            "name": "Train Demo",
+            "configurations": ["Gym", "Demo"]
         },
         {
             "name": "Train SAC",
