@@ -312,6 +312,12 @@ class AttitudeManager():
         Return the clear data command of the agent.
         """
         return f"SetAttitude {satellite.Path} ClearData AllProfiles"
+    
+    def get_segments_command(self, satellite):
+        """
+        Return the segments command of the agent.
+        """
+        return f"""GetAttitude {satellite.Path} Segments"""
         
     def get_transition_command(self, satellite, time):
         """
@@ -449,6 +455,8 @@ class FeaturesManager():
         self.states_features = agent["states_features"]
         self.actions_features = agent["actions_features"]
         self.target_memory = 0
+        self.aux_state = {"detic_lat": None, "detic_lon": None, "detic_alt": None}
+        self.detic_log = {"prev_lat": None, "prev_lon": None, "prev_alt": None, "curr_lat": None, "curr_lon": None, "curr_alt": None, "counter": 0}
 
         # Iterate over the states
         for state in self.states_features:
@@ -464,11 +472,11 @@ class FeaturesManager():
         for action in self.actions_features:
             self.action[action] = 0
     
-    def get_state(self):
+    def get_state(self, name: str=None):
         """
         Return the properties of the agent.
         """
-        return self.state
+        return self.state if name is None else self.state[name]
                    
     def update_state(self, name, value):
         """
@@ -476,6 +484,15 @@ class FeaturesManager():
         """
         if name in self.state.keys():
             self.state[name] = value
+        else:
+            raise ValueError(f"Variable {name} does not exist in the class.")
+        
+    def update_aux_state(self, name, value):
+        """
+        Update the auxiliar state properties of the agent.
+        """
+        if name in self.aux_state.keys():
+            self.aux_state[name] = value
         else:
             raise ValueError(f"Variable {name} does not exist in the class.")
         
@@ -519,20 +536,106 @@ class FeaturesManager():
         if "el" in self.state.keys():
             self.update_state("el", el)
         
-    def update_detic_state(self, satellite: IAgStkObject, time: str):
+    def update_detic_state(self):
         """
         Update the LLA state of the agent.
         """
-        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(time).DataSets
-        detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0] # Group Items --> 0: TrueOfDateRotating, 1: Fixed
-        detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
-        detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
+        detic_lat = self.get_aux_state("detic_lat")
+        detic_lon = self.get_aux_state("detic_lon")
+        detic_alt = self.get_aux_state("detic_alt")
+
         if "detic_lat" in self.state.keys():
             self.update_state("detic_lat", detic_lat)
         if "detic_lon" in self.state.keys():
             self.update_state("detic_lon", detic_lon)
         if "detic_alt" in self.state.keys():
             self.update_state("detic_alt", detic_alt)
+
+    def update_entire_aux_state(self, satellite: IAgStkObject, target_mg, time: str):
+        """
+        Update the auxiliar state of the agent.
+        """
+        detic_lat, detic_lon, detic_alt = self.get_LLA_state(satellite, target_mg, time)
+
+        if "detic_lat" in self.aux_state.keys():
+            self.update_aux_state("detic_lat", detic_lat)
+        if "detic_lon" in self.aux_state.keys():
+            self.update_aux_state("detic_lon", detic_lon)
+        if "detic_alt" in self.aux_state.keys():
+            self.update_aux_state("detic_alt", detic_alt)
+        
+    def get_aux_state(self, name: str=None):
+        """
+        Get the auxiliar state of the agent.
+        """
+        return self.aux_state if name is None else self.aux_state[name]
+    
+    def get_LLA_state(self, satellite: IAgStkObject, target_mg, time: str):
+        """
+        Get the LLA state of the agent. Interpolation is used to get the LLA state, given the high computational cost.
+        """
+        if self.detic_log["counter"] == 0 or self.detic_log["counter"] >= self.agent_config["LLA_step_gap"]: # it takes high computational cost to get the LLA state
+            # Save the previous LLA state if it is not the first time
+            if self.detic_log["counter"] != 0:
+                self.detic_log["prev_lat"] = self.detic_log["curr_lat"]
+                self.detic_log["prev_lon"] = self.detic_log["curr_lon"]
+                self.detic_log["prev_alt"] = self.detic_log["curr_alt"]
+
+            # Get the LLA state of the agent
+            detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(time).DataSets
+            detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0] # Group Items --> 0: TrueOfDateRotating, 1: Fixed
+            detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
+            detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
+
+            # Store the current LLA state
+            self.detic_log["curr_lat"] = detic_lat
+            self.detic_log["curr_lon"] = detic_lon
+            self.detic_log["curr_alt"] = detic_alt
+            self.detic_log["counter"] = 1
+        else:
+            detic_lat = self.detic_log["curr_lat"]
+            detic_lon = self.detic_log["curr_lon"]
+            detic_alt = self.detic_log["curr_alt"]
+
+            # If there are previous LLA states, use them to interpolate the current LLA state
+            if self.detic_log["prev_lat"] != None:
+                prev_detic_lat = self.detic_log["prev_lat"]
+                prev_detic_lon = self.detic_log["prev_lon"]
+                prev_detic_alt = self.detic_log["prev_alt"]
+
+                fraction = self.detic_log["counter"] / self.agent_config["LLA_step_gap"]
+                detic_lat, detic_lon, detic_alt = self.interpolate_LLA_state(prev_detic_lat, prev_detic_lon, prev_detic_alt, detic_lat, detic_lon, detic_alt, target_mg, fraction)
+
+            self.detic_log["counter"] += 1
+
+        return detic_lat, detic_lon, detic_alt
+    
+    def interpolate_LLA_state(self, lat_0: float, lon_0: float, alt_0: float, lat_1: float, lon_1: float, alt_1: float, target_mg, fraction: float):
+        """
+        Interpolate the LLA state of the agent, using circular and linear interpolation.
+        """
+        # ------------------------------------- CLARIFICATION -------------------------------------
+        # The interpolation follows a circular path on the Earth's surface for coordinates
+        #   and a linear path for the altitude. The interpolation is done as follows:
+        # lat_2 = A * p_2 + B
+        # lon_2 = C * p_2 + D
+        # alt_2 = (alt_1 - alt_0) * (1 + fr) + alt_0
+        # Where, by means of 2 points (4 equations):
+        # A = (lat_1 - lat_0) / p1
+        # B = lat_0
+        # C = (lon_1 - lon_0) / p1
+        # D = lon_0
+        # And the distance in radians between the 2 points is:
+        # p1 = haversine_angle(lat_0, lon_0, lat_1, lon_1)
+        # p2 = p1 * (1 + fr)
+        # -----------------------------------------------------------------------------------------
+        p1 = target_mg.haversine_angle(lat_0, lon_0, lat_1, lon_1)
+        p2 = p1 * (1 + fraction)
+        lat = (lat_1 - lat_0) / p1 * p2 + lat_0
+        lon = (lon_1 - lon_0) / p1 * p2 + lon_0
+        alt = (alt_1 - alt_0) * (1 + fraction) + alt_0
+
+        return lat, lon, alt
 
     def update_target_memory(self, preferred_zones, all_zones):
         """
@@ -662,7 +765,7 @@ class TargetManager():
         
         return zone
     
-    def get_FoR_window_df(self, satellite: IAgStkObject, date_mg: DateManager, margin_pct: float=10) -> pd.DataFrame:
+    def get_FoR_window_df(self, date_mg: DateManager, features_mg: FeaturesManager, margin_pct: float=10) -> pd.DataFrame:
         """
         Return the Field of Regard (FoR) window dataframe.
         """
@@ -671,15 +774,9 @@ class TargetManager():
         FoR_window_df = FoR_window_df[FoR_window_df["numeric_start_date"] <= date_mg.num_of_date(date_mg.simplify_date(date_mg.current_date))]
 
         # Get the satellite's geodetic coordinates (deg, deg, km)
-        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.last_date).DataSets
-        detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0]
-        detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
-        detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
-
-        detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(date_mg.current_date).DataSets
-        detic_lat = (detic_lat + detic_dataset.GetDataSetByName("Lat").GetValues()[0])/2
-        detic_lon = (detic_lon + detic_dataset.GetDataSetByName("Lon").GetValues()[0])/2
-        detic_alt = (detic_alt + detic_dataset.GetDataSetByName("Alt").GetValues()[0])/2
+        detic_lat = features_mg.get_aux_state("detic_lat")
+        detic_lon = features_mg.get_aux_state("detic_lon")
+        detic_alt = features_mg.get_aux_state("detic_alt")
 
         # Find the distance between the satellite's nadir and the targets
         FoR_window_df["distance"] = FoR_window_df.apply(lambda row: self.haversine(detic_lat, detic_lon, row["lat [deg]"], row["lon [deg]"]), axis=1)
@@ -691,22 +788,7 @@ class TargetManager():
         FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * (1 + margin_pct/100)] # 10% margin
 
         return FoR_window_df
-    
-    def get_FoR_zones(self, satellite_lat: float, satellite_lon: float, altitude: float, FoR: float):
-        """
-        Return the zones within the Field of Regard (FoR).
-        """
-        zones = []
-        for i in range(self.df.shape[0]):
-            zone = self.get_zone_by_row(i)
-            zone_lat = zone["lat [deg]"].values[0]
-            zone_lon = zone["lon [deg]"].values[0]
-            distance = self.haversine(satellite_lat, satellite_lon, zone_lat, zone_lon)
-            if distance <= FoR:
-                zones.append(zone)
-        
-        return zones
-    
+
     def calculate_D_FoR(self, altitude: float):
         """
         Calculate the distance of the Field of Regard (FoR).
@@ -720,13 +802,25 @@ class TargetManager():
         # Convert degrees to radians
         lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
 
+        # Haversine angle
+        c = self.haversine_angle(lat1, lon1, lat2, lon2)
+
+        return RT * c
+    
+    def haversine_angle(self, lat1, lon1, lat2, lon2):
+        """
+        Calculate the great circle distance between two points on the earth (specified in decimal degrees).
+        """
+        # Convert degrees to radians
+        lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+
         # Haversine formula
         dlat = lat2 - lat1
         dlon = lon2 - lon1
         a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
         c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-        return RT * c
+        return c
 
 class Rewarder():
     """

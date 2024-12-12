@@ -96,6 +96,7 @@ class Gym():
         elif request_data["command"] == "shutdown":
             if not self.stk_env.agents_config["deep_training"]:
                 self.stk_env.stk_root.SaveScenario()
+            self.stk_env.stk_root.CloseScenario()
             self.generate_output()
             self.running = False
             return json.dumps({"status": "shutdown_complete"})
@@ -138,10 +139,9 @@ class STKEnvironment():
         self.agents_config = agents_config
         self.evpt_file_path = evpt_file_path
         self.out_folder_path = out_folder_path
-        stk_app = STKEngine().StartApplication(noGraphics=False)
-        stk_root = stk_app.NewObjectRoot()
-        self.stk_app = stk_app
-        self.stk_root = stk_root
+        self.stk_engine = STKEngine()
+        self.stk_app = self.stk_engine.StartApplication(noGraphics=False)
+        self.stk_root = self.stk_app.NewObjectRoot()
         self.scenario = self.build_scenario(self.stk_root, self.agents_config)
         self.satellites_tuples = []
         self.date_mg = DateManager(self.scenario.StartTime, self.scenario.StopTime)
@@ -216,6 +216,9 @@ class STKEnvironment():
         cmd = f"""SetAttitude {satellite.Path} Profile AlignConstrain PR {attitude_mg.current_pitch} {attitude_mg.current_roll} "Satellite/{satellite.InstanceName} {attitude_mg.align_reference}" Axis {attitude_mg.constraint_axes} "Satellite/{satellite.InstanceName} {attitude_mg.constraint_reference}" """
         self.stk_root.ExecuteCommand(cmd)
 
+        # Update all necessary auxiliar features
+        features_mg.update_entire_aux_state(satellite, self.target_mg, scenario.StartTime)
+
         # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
         checked_var = []
         for var in agent["states_features"]:
@@ -230,10 +233,10 @@ class STKEnvironment():
                     features_mg.update_sensor_state(sensor_mg.current_azimuth, sensor_mg.current_elevation)
                     checked_var += ["az", "el"]
                 elif var in ["detic_lat", "detic_lon", "detic_alt"]:
-                    features_mg.update_detic_state(satellite, scenario.StartTime)
+                    features_mg.update_detic_state()
                     checked_var += ["detic_lat", "detic_lon", "detic_alt"]
                 elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
-                    features_mg.update_target_memory(self.target_mg.get_FoR_window_df(satellite, date_mg, margin_pct=0), self.target_mg.df)
+                    features_mg.update_target_memory(self.target_mg.get_FoR_window_df(date_mg, features_mg, margin_pct=0), self.target_mg.df)
                     target_number = int(var.split("_")[1])
                     checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
                     pass
@@ -364,16 +367,17 @@ class STKEnvironment():
         """
         Draw a point target on the scenario map.
         """
-        self.stk_root.BeginUpdate()
-
         # Create the point target
         target = scenario.Children.New(AgESTKObjectType.eTarget, f"target{idx}")
+
+        self.stk_root.BeginUpdate()
         target.Position.AssignGeodetic(lat, lon, alt)
-
-        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
-        self.stk_root.ExecuteCommand(cmd)
-
         self.stk_root.EndUpdate()
+
+        if not self.agents_config["deep_training"]:
+            # Add the time intervals
+            cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
+            self.stk_root.ExecuteCommand(cmd)
 
         # Store the zones
         self.target_mg.append_zone(f"target{idx}", target, "Point", lat, lon, priority, start_date, end_date)
@@ -382,16 +386,14 @@ class STKEnvironment():
         """
         Draw an area target on the scenario map.
         """
-        self.stk_root.BeginUpdate()
-
         # Create the area target
         target = scenario.Children.New(AgESTKObjectType.eAreaTarget, f"target{idx}")
         target.AreaType = AgEAreaType.ePattern
 
-        cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
-        self.stk_root.ExecuteCommand(cmd)
-        
-        self.stk_root.EndUpdate()
+        if not self.agents_config["deep_training"]:
+            # Add the time intervals
+            cmd = f"""DisplayTimes {target.Path} Intervals Add 1 "{start_date}" "{end_date}" """
+            self.stk_root.ExecuteCommand(cmd)
 
         if len(lats) != len(lons):
             raise ValueError("Latitude and longitude lists must have the same length.")
@@ -421,15 +423,11 @@ class STKEnvironment():
         """
         Delete n event zones from the scenario map.
         """
-        self.stk_root.BeginUpdate()
-
         # Unload the object from the scenario
         if type == "Point":
             scenario.Children.Unload(AgESTKObjectType.eTarget, name)
         elif type == "Area":
             scenario.Children.Unload(AgESTKObjectType.eAreaTarget, name)
-
-        self.stk_root.EndUpdate()
         
     def step(self, agent_id, action, delta_time):
         """
@@ -439,8 +437,14 @@ class STKEnvironment():
         if delta_time < 0.5 and delta_time != 0.0:
             raise ValueError("Delta time must be at least 0.5 seconds.")
         
+        if self.agents_config["debug"]:
+            before = perf_counter()
+
         # Update the agent's features
         done = self.update_agent(agent_id, action, delta_time)
+
+        if self.agents_config["debug"]:
+            print(f"Time taken to update agent: {perf_counter() - before:.2f} seconds.")
 
         # Return None if the episode is done
         if done:
@@ -460,8 +464,14 @@ class STKEnvironment():
         # Store the reward
         self.plotter.store_reward(reward)
 
+        if self.agents_config["debug"]:
+            before = perf_counter()
+
         # Update the target zones
         self.update_target_zones(agent_id)
+
+        if self.agents_config["debug"]:
+            print(f"Time taken to update target zones: {perf_counter() - before:.2f} seconds.")
 
         return state, reward, done
     
@@ -488,13 +498,9 @@ class STKEnvironment():
             # Get the zones which are unloadable because they will no longer be visible
             unloadable_df = target_mg.get_unloadable_zones_before(lowest_current_date)
 
-            self.stk_root.BeginUpdate()
-
             # Unload the zones
             for _, row in unloadable_df.iterrows():
                 self.delete_object(scenario, row["name"], row["type"])
-            
-            self.stk_root.EndUpdate()
 
         target_mg.unload_zones_before(lowest_current_date)
     
@@ -545,7 +551,7 @@ class STKEnvironment():
                 else:
                     if self.agents_config["deep_training"]:
                         # Get the attitude profile
-                        cmd = f"""GetAttitude {satellite.Path} Segments"""
+                        cmd = attitude_mg.get_segments_command(satellite)
 
                         # Execute the command
                         segments = self.stk_root.ExecuteCommand(cmd)
@@ -553,7 +559,7 @@ class STKEnvironment():
                         if segments.Count > 12: # number obtained from testing study
                             # First, clear all but the last attitude command
                             cmd = attitude_mg.get_clear_data_command(satellite)
-                            self.stk_root.ExecuteCommand(f"SetAttitude {satellite.Path} ClearData AllProfiles")
+                            self.stk_root.ExecuteCommand(cmd)
                             
                             # Then, add the previous orientation command
                             cmd = attitude_mg.get_previous_orientation_command()
@@ -584,6 +590,9 @@ class STKEnvironment():
         # Find the orbital elements and update the features manager
         orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, features_mg.agent_config)
 
+        # Update all necessary auxiliar features
+        features_mg.update_entire_aux_state(satellite, self.target_mg, date_mg.current_date)
+
         # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
         checked_var = []
         for var in features_mg.state.keys():
@@ -598,10 +607,10 @@ class STKEnvironment():
                     features_mg.update_sensor_state(sensor_mg.current_azimuth, sensor_mg.current_elevation)
                     checked_var += ["az", "el"]
                 elif var in ["detic_lat", "detic_lon", "detic_alt"]:
-                    features_mg.update_detic_state(satellite, date_mg.current_date)
+                    features_mg.update_detic_state()
                     checked_var += ["detic_lat", "detic_lon", "detic_alt"]
                 elif var.startswith("lat_") or var.startswith("lon_") or var.startswith("priority_"):
-                    features_mg.update_target_memory(self.target_mg.get_FoR_window_df(satellite, date_mg, margin_pct=0), self.target_mg.df)
+                    features_mg.update_target_memory(self.target_mg.get_FoR_window_df(date_mg, features_mg, margin_pct=0), self.target_mg.df)
                     target_number = int(var.split("_")[1])
                     checked_var += [f"lat_{target_number}", f"lon_{target_number}", f"priority_{target_number}"]
                 else:
@@ -639,7 +648,7 @@ class STKEnvironment():
         adj_current_date = date_mg.get_current_date_after(self.agents_config["min_duration"])
 
         # Get the dataframe filtered on the window and the FoR
-        FoR_window_df = self.target_mg.get_FoR_window_df(satellite=satellite, date_mg=date_mg)
+        FoR_window_df = self.target_mg.get_FoR_window_df(date_mg=date_mg, features_mg=features_mg)
 
         # Iterate over all targets in the window
         for _, target in FoR_window_df.iterrows():
