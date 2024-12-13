@@ -6,3 +6,6 @@ __pycache__/
 *.eps
 *.jpg
 *.jpeg
+
+#Simulation log files
+*.log
