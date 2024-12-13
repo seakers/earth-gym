@@ -433,6 +433,9 @@ class STKEnvironment():
         """
         Forward method. Return the next state and reward based on the current state and action taken.
         """
+        if self.agents_config["debug"]:
+            whole_step_before = perf_counter()
+
         # Check if time is over 0.5 seconds
         if delta_time < 0.5 and delta_time != 0.0:
             raise ValueError("Delta time must be at least 0.5 seconds.")
@@ -450,21 +453,35 @@ class STKEnvironment():
         if done:
             print(f"Episode for agent {agent_id} is done.")
             return None, None, done
+        
+        if self.agents_config["debug"]:
+            before = perf_counter()
 
         # Get the next state
         state = self.get_state(agent_id, as_dict=True)
 
+        if self.agents_config["debug"]:
+            print(f"Time taken to get state: {perf_counter() - before:.2f} seconds.")
+
         # If zero delta time, return only the state and do not enter the reward calculation
         if delta_time == 0.0:
             return state, None, None
+        
+        if self.agents_config["debug"]:
+            before = perf_counter()
 
         # Get the reward
         reward = self.get_reward(agent_id, delta_time)
+
+        if self.agents_config["debug"]:
+            print(f"Time taken to get reward: {perf_counter() - before:.2f} seconds.")
+            before = perf_counter()
 
         # Store the reward
         self.plotter.store_reward(reward)
 
         if self.agents_config["debug"]:
+            print(f"Time taken to store reward: {perf_counter() - before:.2f} seconds.")
             before = perf_counter()
 
         # Update the target zones
@@ -472,6 +489,7 @@ class STKEnvironment():
 
         if self.agents_config["debug"]:
             print(f"Time taken to update target zones: {perf_counter() - before:.2f} seconds.")
+            print(f"Time taken for the whole step: {perf_counter() - whole_step_before:.2f} seconds.")
 
         return state, reward, done
     
@@ -647,8 +665,16 @@ class STKEnvironment():
         # minduration-adjusted current date
         adj_current_date = date_mg.get_current_date_after(self.agents_config["min_duration"])
 
+        if self.agents_config["debug"]:
+            before = perf_counter()
+
         # Get the dataframe filtered on the window and the FoR
         FoR_window_df = self.target_mg.get_FoR_window_df(date_mg=date_mg, features_mg=features_mg)
+
+        if self.agents_config["debug"]:
+            print(f"    Time taken to get FoR window dataframe: {perf_counter() - before:.2f} seconds.")
+            before = perf_counter()
+            print(f"        Number of targets in FoR window: {FoR_window_df.shape[0]}")
 
         # Iterate over all targets in the window
         for _, target in FoR_window_df.iterrows():
@@ -660,8 +686,15 @@ class STKEnvironment():
             aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
             data_providers.append((access_data_provider, aer_data_provider))
 
+        if self.agents_config["debug"]:
+            print(f"    Time taken to get access data providers: {perf_counter() - before:.2f} seconds.")
+            before = perf_counter()
+
         # Call the rewarder to calculate the reward
         reward = rewarder.calculate_reward(data_providers, delta_time, date_mg, sensor_mg, features_mg, attitude_mg.angle_domains)
+
+        if self.agents_config["debug"]:
+            print(f"    Time taken to calculate reward: {perf_counter() - before:.2f} seconds.")
 
         return reward
 

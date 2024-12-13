@@ -1,9 +1,9 @@
 {
     "general": {
-        "debug": false,
+        "debug": true,
         "scenario_name": "SAC",
-        "start_time": "1 Jan 2024 00:00:00.000",
-        "stop_time": "1 Jan 2024 00:07:00.000",
+        "start_time": "1 Mar 2024 00:00:00.000",
+        "stop_time": "12 Mar 2024 00:00:00.000",
         "propagator": "HPOP",
         "visible_targets": 100,
         "deep_training": true
@@ -17,7 +17,7 @@
     "agents": [
         {
             "general": {
-                "LLA_step_gap": 10
+                "LLA_step_gap": 30
             },
             "position": {
                 "reference_frame": "ICRF",

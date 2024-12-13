@@ -799,9 +799,6 @@ class TargetManager():
         """
         Calculate the great circle distance between two points on the earth (specified in decimal degrees).
         """
-        # Convert degrees to radians
-        lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
-
         # Haversine angle
         c = self.haversine_angle(lat1, lon1, lat2, lon2)
 
