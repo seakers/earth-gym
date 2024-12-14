@@ -370,8 +370,11 @@ class STKEnvironment():
         # Create the point target
         target = scenario.Children.New(AgESTKObjectType.eTarget, f"target{idx}")
 
+        # Set the position of the target
         self.stk_root.BeginUpdate()
-        target.Position.AssignGeodetic(lat, lon, alt)
+        # target.Position.AssignGeodetic(lat, lon, alt) # this method is good but slower
+        cmd = f"SetPosition {target.Path} Geodetic {lat} {lon} {alt}"
+        self.stk_root.ExecuteCommand(cmd)
         self.stk_root.EndUpdate()
 
         if not self.agents_config["deep_training"]:

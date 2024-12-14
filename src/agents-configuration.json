@@ -1,9 +1,9 @@
 {
     "general": {
-        "debug": true,
+        "debug": false,
         "scenario_name": "SAC",
-        "start_time": "1 Mar 2024 00:00:00.000",
-        "stop_time": "12 Mar 2024 00:00:00.000",
+        "start_time": "1 Jan 2024 00:00:00.000",
+        "stop_time": "15 Jul 2024 00:00:00.000",
         "propagator": "HPOP",
         "visible_targets": 100,
         "deep_training": true

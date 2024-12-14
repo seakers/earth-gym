@@ -19,7 +19,7 @@
                 "--host", "localhost",
                 "--port", "5555",
                 "--conf", "${workspaceFolder}\\src\\agents-configuration.json",
-                "--evpt", "${workspaceFolder}\\data\\random-points.csv",
+                "--evpt", "${workspaceFolder}\\data\\random-points-300k.csv",
                 "--out", "${workspaceFolder}\\output"
             ]
         },
