@@ -456,7 +456,7 @@ class FeaturesManager():
         self.actions_features = agent["actions_features"]
         self.target_memory = 0
         self.aux_state = {"detic_lat": None, "detic_lon": None, "detic_alt": None}
-        self.detic_log = {"prev_lat": None, "prev_lon": None, "prev_alt": None, "curr_lat": None, "curr_lon": None, "curr_alt": None, "counter": 0}
+        self.detic_log = {"prev_lat": None, "prev_lon": None, "prev_alt": None, "curr_lat": None, "curr_lon": None, "curr_alt": None, "counter": 0, "curr_step_gap": 1, "prev_step_gap": 1}
 
         # Iterate over the states
         for state in self.states_features:
@@ -574,7 +574,7 @@ class FeaturesManager():
         """
         Get the LLA state of the agent. Interpolation is used to get the LLA state, given the high computational cost.
         """
-        if self.detic_log["counter"] == 0 or self.detic_log["counter"] >= self.agent_config["LLA_step_gap"]: # it takes high computational cost to get the LLA state
+        if self.detic_log["counter"] == 0 or self.detic_log["counter"] >= self.detic_log["curr_step_gap"]: # it takes high computational cost to get the LLA state
             # Save the previous LLA state if it is not the first time
             if self.detic_log["counter"] != 0:
                 self.detic_log["prev_lat"] = self.detic_log["curr_lat"]
@@ -592,6 +592,12 @@ class FeaturesManager():
             self.detic_log["curr_lon"] = detic_lon
             self.detic_log["curr_alt"] = detic_alt
             self.detic_log["counter"] = 1
+
+            # Update the step gap progressively
+            self.detic_log["prev_step_gap"] = self.detic_log["curr_step_gap"]
+            self.detic_log["curr_step_gap"] = 2 * self.detic_log["curr_step_gap"]
+            self.detic_log["curr_step_gap"] = self.detic_log["curr_step_gap"] if self.detic_log["curr_step_gap"] <= self.agent_config["LLA_step_gap"] else self.agent_config["LLA_step_gap"]
+
         else:
             detic_lat = self.detic_log["curr_lat"]
             detic_lon = self.detic_log["curr_lon"]
@@ -603,7 +609,7 @@ class FeaturesManager():
                 prev_detic_lon = self.detic_log["prev_lon"]
                 prev_detic_alt = self.detic_log["prev_alt"]
 
-                fraction = self.detic_log["counter"] / self.agent_config["LLA_step_gap"]
+                fraction = self.detic_log["counter"] / self.detic_log["prev_step_gap"]
                 detic_lat, detic_lon, detic_alt = self.interpolate_LLA_state(prev_detic_lat, prev_detic_lon, prev_detic_alt, detic_lat, detic_lon, detic_alt, target_mg, fraction)
 
             self.detic_log["counter"] += 1
