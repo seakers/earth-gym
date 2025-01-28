@@ -8,80 +8,80 @@
             "name": "Gym",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}\\src\\main.py",
+            "program": "${workspaceFolder}/src/main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "python": "C:\\Users\\gerardmr\\.conda\\envs\\earth-gym\\python",
+            "python": "/home/geri/anaconda3/envs/stk/bin/python",
             "env": {
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "args": [
                 "--host", "localhost",
-                "--port", "5555",
-                "--conf", "${workspaceFolder}\\src\\agents-configuration.json",
-                "--evpt", "${workspaceFolder}\\data\\random-points-300k.csv",
-                "--out", "${workspaceFolder}\\output"
+                "--port", "5070",
+                "--conf", "${workspaceFolder}/src/agents-configuration.json",
+                "--evpt", "${workspaceFolder}/data/random-points-300k.csv",
+                "--out", "${workspaceFolder}/output"
             ]
         },
         {
             "name": "Demo",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}\\docs\\demo.py",
+            "program": "${workspaceFolder}/docs/demo.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "python": "C:\\Users\\gerardmr\\.conda\\envs\\myenv\\python",
+            "python": "C:/Users/gerardmr/.conda/envs/myenv/python",
             "args": [
                 "--host", "localhost",
-                "--port", "5555"
+                "--port", "5070"
             ]
         },
         {
             "name": "SAC",
             "type": "debugpy",
             "request": "launch",
-            "program": "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\sac-transformer-EOS\\src\\main.py",
+            "program": "/home/geri/tfg/repos/sac-transformer-EOS/src/main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "python": "C:\\Users\\gerardmr\\.conda\\envs\\sac\\python",
+            "python": "/home/geri/anaconda3/envs/sac/bin/python",
             "env": {
-                "PYTHONPATH": "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\sac-transformer-EOS"
+                "PYTHONPATH": "/home/geri/tfg/repos/sac-transformer-EOS"
             },
             "args": [
                 "--host", "localhost",
-                "--port", "5555",
-                "--save", "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\sac-transformer-EOS\\output",
+                "--port", "5070",
+                "--save", "/home/geri/tfg/repos/sac-transformer-EOS/output",
             ]
         },
         {
             "name": "RL",
             "type": "debugpy",
             "request": "launch",
-            "program": "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\rl-transformer-EOS\\main.py",
+            "program": "C:/Users/gerardmr/OneDrive - Texas A&M University/Documents/tfg/rl-transformer-EOS/main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "python": "C:\\Users\\gerardmr\\.conda\\envs\\sac\\python",
+            "python": "C:/Users/gerardmr/.conda/envs/sac/python",
             "args": [
                 "--host", "localhost",
-                "--port", "5555",
-                "--save", "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\rl-transformer-EOS\\trained",
+                "--port", "5070",
+                "--save", "C:/Users/gerardmr/OneDrive - Texas A&M University/Documents/tfg/rl-transformer-EOS/trained",
             ]
         },
         {
             "name": "Infer",
             "type": "debugpy",
             "request": "launch",
-            "program": "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\infer-transformer-EOS\\src\\main.py",
+            "program": "C:/Users/gerardmr/OneDrive - Texas A&M University/Documents/tfg/infer-transformer-EOS/src/main.py",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "python": "C:\\Users\\gerardmr\\.conda\\envs\\sac\\python",
+            "python": "C:/Users/gerardmr/.conda/envs/sac/python",
             "env": {
-                "PYTHONPATH": "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\infer-transformer-EOS"
+                "PYTHONPATH": "C:/Users/gerardmr/OneDrive - Texas A&M University/Documents/tfg/infer-transformer-EOS"
             },
             "args": [
                 "--host", "localhost",
-                "--port", "5555",
-                "--inpt", "C:\\Users\\gerardmr\\OneDrive - Texas A&M University\\Documents\\tfg\\infer-transformer-EOS\\input",
+                "--port", "5070",
+                "--inpt", "C:/Users/gerardmr/OneDrive - Texas A&M University/Documents/tfg/infer-transformer-EOS/input",
             ]
         }
     ],
