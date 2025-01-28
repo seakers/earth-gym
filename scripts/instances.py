@@ -140,7 +140,7 @@ class STKEnvironment():
         self.evpt_file_path = evpt_file_path
         self.out_folder_path = out_folder_path
         self.stk_engine = STKEngine()
-        self.stk_app = self.stk_engine.StartApplication(noGraphics=False)
+        self.stk_app = self.stk_engine.StartApplication(noGraphics=True)
         self.stk_root = self.stk_app.NewObjectRoot()
         self.scenario = self.build_scenario(self.stk_root, self.agents_config)
         self.satellites_tuples = []
@@ -168,7 +168,7 @@ class STKEnvironment():
         scenario.StartTime = agents_config["start_time"]
         scenario.StopTime = agents_config["stop_time"]
         scenario.SetTimePeriod(scenario.StartTime, scenario.StopTime)
-        root.Rewind()
+        # root.Rewind()
         return scenario
 
     def build_satellite(self, agent, scenario: IAgStkObject, idx) -> tuple[IAgStkObject, SensorManager, FeaturesManager, DateManager, AttitudeManager]:

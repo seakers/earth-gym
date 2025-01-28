@@ -2,8 +2,8 @@
     "general": {
         "debug": false,
         "scenario_name": "SAC",
-        "start_time": "20 Aug 2006 00:00:00.000",
-        "stop_time": "22 Aug 2006 00:00:00.000",
+        "start_time": "20 Jul 2010 00:00:00.000",
+        "stop_time": "20 Jul 2013 00:00:00.000",
         "propagator": "HPOP",
         "visible_targets": 100,
         "deep_training": true

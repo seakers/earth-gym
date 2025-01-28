@@ -971,7 +971,7 @@ class Plotter():
     """
     Class to manage the plotting of the model
     """
-    def __init__(self, out_folder_path: str="${workspaceFolder}\\output"):
+    def __init__(self, out_folder_path: str="${workspaceFolder}/output"):
         self.class_name = "Plotter"
         self.rewards = pd.DataFrame()
         self.out_folder_path = out_folder_path
@@ -1002,7 +1002,7 @@ class Plotter():
         # Save the plot
         if not os.path.exists(self.out_folder_path):
             os.makedirs(self.out_folder_path)
-        plt.savefig(f"{self.out_folder_path}\\rewards.png", dpi=500)
+        plt.savefig(f"{self.out_folder_path}/rewards.png", dpi=500)
     
     def plot_rewards_smoothed(self, window_size: int=0):
         """
@@ -1028,7 +1028,7 @@ class Plotter():
         # Save the plot
         if not os.path.exists(self.out_folder_path):
             os.makedirs(self.out_folder_path)
-        plt.savefig(f"{self.out_folder_path}\\rewards_smoothed.png", dpi=500)
+        plt.savefig(f"{self.out_folder_path}/rewards_smoothed.png", dpi=500)
 
     def plot_cumulative_rewards(self):
         """
@@ -1052,7 +1052,7 @@ class Plotter():
         # Save the plot
         if not os.path.exists(self.out_folder_path):
             os.makedirs(self.out_folder_path)
-        plt.savefig(f"{self.out_folder_path}\\cumulative_rewards.png", dpi=500)
+        plt.savefig(f"{self.out_folder_path}/cumulative_rewards.png", dpi=500)
 
     def plot_cumulative_rewards_smoothed_per_steps(self, window_size: int=10):
         """
@@ -1080,7 +1080,7 @@ class Plotter():
         # Save the plot
         if not os.path.exists(self.out_folder_path):
             os.makedirs(self.out_folder_path)
-        plt.savefig(f"{self.out_folder_path}\\cumulative_rewards_smoothed_per_steps.png", dpi=500)
+        plt.savefig(f"{self.out_folder_path}/cumulative_rewards_smoothed_per_steps.png", dpi=500)
 
     def plot_all(self, window_size: int=0):
         """
