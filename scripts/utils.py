@@ -925,7 +925,7 @@ class Rewarder():
         - max_zen_angle: maximum elevation angle of the event.
         """
         # Target-specific profit
-        profit = self.agents_config["priority_weight"] * priority
+        profit = priority**self.agents_config["priority_weight"]
 
         # Each of the value functions
         f_theta = self.f_theta(max_zen_angle)
@@ -938,7 +938,7 @@ class Rewarder():
         Function rewarding the angle between the event and the satellite. Inputs given in the form of a list.
         - el_angles: list of elevation angles.
         """
-        return self.agents_config["zenith_weight"] * math.sin(math.radians(max_zen_angle)) # the higher the better, the angle is in degrees
+        return math.sin(math.radians(max_zen_angle))**self.agents_config["zenith_weight"] # the higher the better, the angle is in degrees
     
     def f_reobs(self, n_obs: int):
         """
