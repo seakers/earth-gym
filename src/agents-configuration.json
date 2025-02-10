@@ -2,8 +2,8 @@
     "general": {
         "debug": false,
         "scenario_name": "SAC",
-        "start_time": "20 Jul 2010 00:00:00.000",
-        "stop_time": "20 Jul 2013 00:00:00.000",
+        "start_time": "1 Jan 2000 00:00:00.000",
+        "stop_time": "1 Jan 2000 02:00:00.000",
         "propagator": "HPOP",
         "visible_targets": 100,
         "deep_training": true
@@ -17,7 +17,7 @@
     "agents": [
         {
             "general": {
-                "LLA_step_gap": 30
+                "LLA_step_gap": 100
             },
             "position": {
                 "reference_frame": "ICRF",
@@ -46,7 +46,7 @@
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
             },
-            "states_features": ["a", "e", "i", "raan", "aop", "ta", "pitch", "roll"],
+            "states_features": ["a", "e", "i", "raan", "aop", "ta", "pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1"],
             "actions_features": ["d_pitch", "d_roll"]
         }
     ]

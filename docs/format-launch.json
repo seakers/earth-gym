@@ -1,0 +1,43 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Gym",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "python": "/path/to/env/bin/python",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "args": [
+                "--host", "localhost",
+                "--port", "5050",
+                "--conf", "${workspaceFolder}/src/agents-configuration.json",
+                "--evpt", "${workspaceFolder}/data/random-points-300k.csv",
+                "--out", "${workspaceFolder}/output"
+            ]
+        },
+        {
+            "name": "Algorithm",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/path/to/algorithm.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "python": "/path/to/env/bin/python",
+            "args": [
+                "--host", "localhost",
+                "--port", "5050"
+            ]
+        }
+    ],
+    "compounds": [
+        {
+            "name": "Train Algorithm",
+            "configurations": ["Gym", "Algorithm"]
+        }
+    ]
+}

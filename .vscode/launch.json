@@ -17,7 +17,7 @@
             },
             "args": [
                 "--host", "localhost",
-                "--port", "5070",
+                "--port", "5050",
                 "--conf", "${workspaceFolder}/src/agents-configuration.json",
                 "--evpt", "${workspaceFolder}/data/random-points-300k.csv",
                 "--out", "${workspaceFolder}/output"
@@ -33,7 +33,7 @@
             "python": "C:/Users/gerardmr/.conda/envs/myenv/python",
             "args": [
                 "--host", "localhost",
-                "--port", "5070"
+                "--port", "5050"
             ]
         },
         {
@@ -49,7 +49,7 @@
             },
             "args": [
                 "--host", "localhost",
-                "--port", "5070",
+                "--port", "5050",
                 "--save", "/home/geri/tfg/repos/sac-transformer-EOS/output",
             ]
         },
@@ -63,7 +63,7 @@
             "python": "C:/Users/gerardmr/.conda/envs/sac/python",
             "args": [
                 "--host", "localhost",
-                "--port", "5070",
+                "--port", "5050",
                 "--save", "C:/Users/gerardmr/OneDrive - Texas A&M University/Documents/tfg/rl-transformer-EOS/trained",
             ]
         },
@@ -80,7 +80,7 @@
             },
             "args": [
                 "--host", "localhost",
-                "--port", "5070",
+                "--port", "5050",
                 "--inpt", "C:/Users/gerardmr/OneDrive - Texas A&M University/Documents/tfg/infer-transformer-EOS/input",
             ]
         }

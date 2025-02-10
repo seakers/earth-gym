@@ -9,3 +9,6 @@ __pycache__/
 
 #Simulation log files
 *.log
+
+# VSCode folder
+.vscode/
