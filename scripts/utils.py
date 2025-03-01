@@ -845,7 +845,7 @@ class Rewarder():
         """
         reward = 0
 
-        reward += self.slew_constraint(delta_time, sensor_mg, features_mg, angle_domains)
+        reward += self.slew_constraint(delta_time, sensor_mg, features_mg, angle_domains) * self.agents_config["slew_weight"]
 
         # Iterate over the access data providers
         for access_data_provider, aer_data_provider in data_providers:
