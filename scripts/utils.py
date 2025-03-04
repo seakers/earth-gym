@@ -1096,15 +1096,12 @@ class Rewarder():
         Function rewarding the grid points seen by the agent. Distances in km.
         """
         reward = 0
-        # count = 0
-        # for_count = 0
 
         # Reset the indices of the dataframe to ensure proper index access
         FoR_window_df.reset_index(drop=True, inplace=True)
 
         # Compute distance to each target
         for lat, lon in grid_points_seen:
-            count += 1
             for i in range(FoR_window_df.shape[0]):
                 distance = self.target_mg.haversine(lat, lon, FoR_window_df["lat [deg]"][i], FoR_window_df["lon [deg]"][i])
                 if distance < D_FoR:
@@ -1124,10 +1121,6 @@ class Rewarder():
                         raise ValueError("Grid reward cannot be negative.")
 
                     reward += r
-                    # for_count += 1
-                    # print(f"Grid point {count} seen. Distance to {event_name}: {distance:0.2f} km. Reward: {r:0.4f} (total of {reward:0.4f}). DFoR: {D_FoR:0.2f} km.")
-
-        # print(f"Grid points seen: {count}. Total of {for_count} calculations. Reward: {reward:0.4f}.")
 
         return reward
     
