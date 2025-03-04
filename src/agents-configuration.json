@@ -3,29 +3,36 @@
         "debug": false,
         "scenario_name": "SAC",
         "start_time": "1 Jan 2000 00:00:00.000",
-        "stop_time": "1 Jan 2000 02:00:00.000",
-        "propagator": "HPOP",
-        "visible_targets": 100,
+        "stop_time": "1 May 2000 0:00:00.000",
+        "propagator": "TwoBody",
         "deep_training": true
+    },
+    "targets_and_grid": {
+        "visible_targets": 100,
+        "use_grid": true,
+        "grid_resolution": 5
     },
     "reward_metrics": {
         "min_duration": 0.5,
-        "reobs_decay": 2,
+        "reobs_decay": 0,
         "zenith_weight": 1,
-        "priority_weight": 1
+        "priority_weight": 1,
+        "grid_weight": 0.05,
+        "grid_decay": 30,
+        "slew_weight": 0.1
     },
     "agents": [
         {
             "general": {
-                "LLA_step_gap": 100
+                "LLA_step_gap": 10
             },
             "position": {
                 "reference_frame": "ICRF",
                 "coordinate_system": "Classical",
                 "initial_orbital_elements": {
-                    "a": 7000,
+                    "a": 8000,
                     "e": 0,
-                    "i": 0,
+                    "i": 30,
                     "raan": 0,
                     "aop": 0,
                     "ta": 0
@@ -40,13 +47,13 @@
             },
             "sensor": {
                     "pattern": "Simple Conic",
-                    "cone_angle": 20,
+                    "cone_angle": 10,
                     "resolution": 0.1,
                     "max_sensor_slew": 1,
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
             },
-            "states_features": ["a", "e", "i", "raan", "aop", "ta", "pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1"],
+            "states_features": ["pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1"],
             "actions_features": ["d_pitch", "d_roll"]
         }
     ]

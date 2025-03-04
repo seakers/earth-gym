@@ -3,6 +3,8 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy.interpolate import PchipInterpolator
+from scipy.spatial.transform import Rotation as R
 
 from agi.stk12.stkobjects import *
 
@@ -276,10 +278,7 @@ class DateManager():
 
 class AttitudeManager():
     """
-    Class to manage the attitude of the model. Functions:
-    - get_item: return the value of the item.
-    - update_pitch: update the pitch of the agent within the boundaries.
-    - update_roll: update the roll of the agent within the boundaries.
+    Class to manage the attitude of the model.
     """
     def __init__(self, agent):
         self.class_name = "Attitude Manager"
@@ -337,43 +336,45 @@ class AttitudeManager():
         Return the previous orientation command of the agent.
         """
         return self.previous_orientation_cmd
-
-    def update_pitch(self, delta_pitch):
-        """
-        Update the pitch of the agent within the boundaries.
-        """
-        self.current_pitch += delta_pitch
-
-        if "pitch" in self.unallowed_angles.keys() and self.current_pitch in self.unallowed_angles["pitch"]:
-            self.current_pitch += 1e-4
-
-        # Correct the pitch if out of boundaries
-        if self.current_pitch > 90:
-            self.current_pitch -= 180
-            self.current_roll += 180
-        elif self.current_pitch < -90:
-            self.current_pitch += 180
-            self.current_roll += 180
-
-        return self.current_pitch
     
-    def update_roll(self, delta_roll):
+    def update_roll_pitch(self, delta_pitch, delta_roll):
         """
-        Update the roll of the agent within the boundaries.
+        Update the current pitch and roll by applying incremental rotations.
+        Order of rotations: roll, pitch, yaw.
+        Yaw is assumed to be zero.
+        
+        Parameters:
+        delta_pitch: incremental change in pitch (degrees)
+        delta_roll: incremental change in roll (degrees)
+        
+        Returns:
+        new_pitch: updated pitch (degrees)
+        new_roll: updated roll (degrees)
         """
-        self.current_roll += delta_roll
+        # Gather the current orientation
+        current_pitch = self.current_pitch
+        current_roll = self.current_roll
 
-        if "roll" in self.unallowed_angles.keys() and self.current_roll in self.unallowed_angles["roll"]:
-            self.current_roll += 1e-4
+        # Represent current orientation with yaw=0 using a full 3D Euler representation.
+        # The sequence 'xyz' means: rotation about x (roll), then y (pitch), then z (yaw).
+        current_rot = R.from_euler('xyz', [current_roll, current_pitch, 0], degrees=True)
+        
+        # Create the incremental rotation; again, yaw change is zero.
+        incremental_rot = R.from_euler('xyz', [delta_roll, delta_pitch, 0], degrees=True)
+        
+        # Apply the incremental rotation (body-fixed update).
+        new_rot = current_rot * incremental_rot
+        
+        # Convert back to Euler angles in the same sequence.
+        new_euler = new_rot.as_euler('xyz', degrees=True)
+        
+        # new_euler contains [new_roll, new_pitch, new_yaw]. We ignore new_yaw.
+        new_roll = new_euler[0]
+        new_pitch = new_euler[1]
 
-        # Correct the roll if out of boundaries
-        while self.current_roll > 180 or self.current_roll < -180:
-            if self.current_roll > 180:
-                self.current_roll -= 360
-            elif self.current_roll < -180:
-                self.current_roll += 360
-
-        return self.current_roll
+        # Set the current pitch and roll to the new values.
+        self.current_pitch = new_pitch
+        self.current_roll = new_roll
 
 class SensorManager():
     """
@@ -456,7 +457,7 @@ class FeaturesManager():
         self.actions_features = agent["actions_features"]
         self.target_memory = 0
         self.aux_state = {"detic_lat": None, "detic_lon": None, "detic_alt": None}
-        self.detic_log = {"prev_lat": None, "prev_lon": None, "prev_alt": None, "curr_lat": None, "curr_lon": None, "curr_alt": None, "counter": 0, "curr_step_gap": 1, "prev_step_gap": 1}
+        self.detic_log = {"max_samples": 50, "all_time_counter": 0, "prev_lat": [], "prev_lon": [], "prev_alt": [], "prev_times": np.array([]), "curr_lat": None, "curr_lon": None, "curr_alt": None, "counter": 0, "curr_step_gap": 1, "prev_step_gap": 1}
 
         # Iterate over the states
         for state in self.states_features:
@@ -574,13 +575,8 @@ class FeaturesManager():
         """
         Get the LLA state of the agent. Interpolation is used to get the LLA state, given the high computational cost.
         """
-        if self.detic_log["counter"] == 0 or self.detic_log["counter"] >= self.detic_log["curr_step_gap"]: # it takes high computational cost to get the LLA state
-            # Save the previous LLA state if it is not the first time
-            if self.detic_log["counter"] != 0:
-                self.detic_log["prev_lat"] = self.detic_log["curr_lat"]
-                self.detic_log["prev_lon"] = self.detic_log["curr_lon"]
-                self.detic_log["prev_alt"] = self.detic_log["curr_alt"]
-
+        if self.detic_log["counter"] == 0 or self.detic_log["counter"] >= self.detic_log["curr_step_gap"] or len(self.detic_log["prev_times"]) <= 2 or abs(self.detic_log["prev_lon"][-1] - self.detic_log["prev_lon"][-2]) > 180: # it takes high computational cost to get the LLA state
+            # print("Getting LLA state...")
             # Get the LLA state of the agent
             detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(time).DataSets
             detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0] # Group Items --> 0: TrueOfDateRotating, 1: Fixed
@@ -593,55 +589,150 @@ class FeaturesManager():
             self.detic_log["curr_alt"] = detic_alt
             self.detic_log["counter"] = 1
 
+            # Correct discontinuities in the longitude
+            if len(self.detic_log["prev_lon"]) >= 2 and abs(self.detic_log["prev_lon"][-1] - self.detic_log["prev_lon"][-2]) > 180:
+                self.detic_log["prev_lon"] = self.detic_log["prev_lon"][-1:]
+                self.detic_log["prev_lat"] = self.detic_log["prev_lat"][-1:]
+                self.detic_log["prev_alt"] = self.detic_log["prev_alt"][-1:]
+                self.detic_log["prev_times"] = self.detic_log["prev_times"][-1:]
+
+            # Save the previous LLA state
+            self.detic_log["prev_lat"] += [self.detic_log["curr_lat"]]
+            self.detic_log["prev_lon"] += [self.detic_log["curr_lon"]]
+            self.detic_log["prev_alt"] += [self.detic_log["curr_alt"]]
+            self.detic_log["prev_times"] = np.concatenate([self.detic_log["prev_times"], np.array([self.detic_log["all_time_counter"]])])
+
+            # Limit the number of samples used for interpolation
+            self.detic_log["prev_lat"] = self.detic_log["prev_lat"][-self.detic_log["max_samples"]:]
+            self.detic_log["prev_lon"] = self.detic_log["prev_lon"][-self.detic_log["max_samples"]:]
+            self.detic_log["prev_alt"] = self.detic_log["prev_alt"][-self.detic_log["max_samples"]:]
+            self.detic_log["prev_times"] = self.detic_log["prev_times"][-self.detic_log["max_samples"]:]
+
             # Update the step gap progressively
-            self.detic_log["prev_step_gap"] = self.detic_log["curr_step_gap"]
-            self.detic_log["curr_step_gap"] = 2 * self.detic_log["curr_step_gap"]
-            self.detic_log["curr_step_gap"] = self.detic_log["curr_step_gap"] if self.detic_log["curr_step_gap"] <= self.agent_config["LLA_step_gap"] else self.agent_config["LLA_step_gap"]
+            if len(self.detic_log["prev_times"]) <= 2:
+                self.detic_log["prev_step_gap"] = self.detic_log["curr_step_gap"] = 1
+            else:
+                self.detic_log["prev_step_gap"] = self.detic_log["curr_step_gap"]
+                self.detic_log["curr_step_gap"] = 2 * self.detic_log["curr_step_gap"]
+                self.detic_log["curr_step_gap"] = self.detic_log["curr_step_gap"] if self.detic_log["curr_step_gap"] <= self.agent_config["LLA_step_gap"] else self.agent_config["LLA_step_gap"]
 
         else:
-            detic_lat = self.detic_log["curr_lat"]
-            detic_lon = self.detic_log["curr_lon"]
-            detic_alt = self.detic_log["curr_alt"]
+            # Reset all the time points
+            self.detic_log["all_time_counter"] -= self.detic_log["prev_times"][0]
+            self.detic_log["prev_times"] -= self.detic_log["prev_times"][0]
 
-            # If there are previous LLA states, use them to interpolate the current LLA state
-            if self.detic_log["prev_lat"] != None:
-                prev_detic_lat = self.detic_log["prev_lat"]
-                prev_detic_lon = self.detic_log["prev_lon"]
-                prev_detic_alt = self.detic_log["prev_alt"]
+            # Perform interpolation with scipy
+            cs_lat = PchipInterpolator(self.detic_log["prev_times"], self.detic_log["prev_lat"])
+            cs_lon = PchipInterpolator(self.detic_log["prev_times"], self.detic_log["prev_lon"])
+            cs_alt = PchipInterpolator(self.detic_log["prev_times"], self.detic_log["prev_alt"])
 
-                fraction = self.detic_log["counter"] / self.detic_log["prev_step_gap"]
-                detic_lat, detic_lon, detic_alt = self.interpolate_LLA_state(prev_detic_lat, prev_detic_lon, prev_detic_alt, detic_lat, detic_lon, detic_alt, target_mg, fraction)
+            # Get the interpolated LLA state at the current time
+            detic_lat = cs_lat(self.detic_log["all_time_counter"])
+            detic_lon = cs_lon(self.detic_log["all_time_counter"])
+            detic_alt = cs_alt(self.detic_log["all_time_counter"])
+
+            # Correct latitude if it exceeds its physical boundaries
+            if detic_lat > 90:
+                detic_lat = 180 - detic_lat
+                detic_lon += 180  # adjust longitude when crossing the north pole
+            elif detic_lat < -90:
+                detic_lat = -180 - detic_lat
+                detic_lon += 180  # adjust longitude when crossing the south pole
+
+            # Normalize the longitude to be within [-180, 180]
+            detic_lon = ((detic_lon + 180) % 360) - 180
+
+            ############## DEBUGGING ############## Use to check if the interpolation is correct
+            # detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(time).DataSets
+            # adetic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0] # Group Items --> 0: TrueOfDateRotating, 1: Fixed
+            # adetic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
+            # adetic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
+            # print("Real LLA state: ", adetic_lat, adetic_lon, adetic_alt)
+            # print(f"PCHIP: {detic_lat}, {detic_lon}, {detic_alt}. Counter: {self.detic_log['counter']}/{self.detic_log['curr_step_gap']}.")
+            # diff = abs(detic_lat - adetic_lat) % 360
+            # diff = min(diff, 360 - diff)
+            # if diff > 10:
+            #     raise ValueError("Longitude is not being interpolated correctly.")
+            ############## DEBUGGING ##############
 
             self.detic_log["counter"] += 1
 
-        return detic_lat, detic_lon, detic_alt
-    
-    def interpolate_LLA_state(self, lat_0: float, lon_0: float, alt_0: float, lat_1: float, lon_1: float, alt_1: float, target_mg, fraction: float):
-        """
-        Interpolate the LLA state of the agent, using circular and linear interpolation.
-        """
-        # ------------------------------------- CLARIFICATION -------------------------------------
-        # The interpolation follows a circular path on the Earth's surface for coordinates
-        #   and a linear path for the altitude. The interpolation is done as follows:
-        # lat_2 = A * p_2 + B
-        # lon_2 = C * p_2 + D
-        # alt_2 = (alt_1 - alt_0) * (1 + fr) + alt_0
-        # Where, by means of 2 points (4 equations):
-        # A = (lat_1 - lat_0) / p1
-        # B = lat_0
-        # C = (lon_1 - lon_0) / p1
-        # D = lon_0
-        # And the distance in radians between the 2 points is:
-        # p1 = haversine_angle(lat_0, lon_0, lat_1, lon_1)
-        # p2 = p1 * (1 + fr)
-        # -----------------------------------------------------------------------------------------
-        p1 = target_mg.haversine_angle(lat_0, lon_0, lat_1, lon_1)
-        p2 = p1 * (1 + fraction)
-        lat = (lat_1 - lat_0) / p1 * p2 + lat_0
-        lon = (lon_1 - lon_0) / p1 * p2 + lon_0
-        alt = (alt_1 - alt_0) * (1 + fraction) + alt_0
+        self.detic_log["all_time_counter"] += 1
 
-        return lat, lon, alt
+        return float(detic_lat), float(detic_lon), float(detic_alt)
+    
+    # def get_LLA_state_OLD(self, satellite: IAgStkObject, target_mg, time: str):
+    #     """
+    #     Get the LLA state of the agent. Interpolation is used to get the LLA state, given the high computational cost.
+    #     """
+    #     if self.detic_log["counter"] == 0 or self.detic_log["counter"] >= self.detic_log["curr_step_gap"]: # it takes high computational cost to get the LLA state
+    #         # Save the previous LLA state if it is not the first time
+    #         if self.detic_log["counter"] != 0:
+    #             self.detic_log["prev_lat"] = self.detic_log["curr_lat"]
+    #             self.detic_log["prev_lon"] = self.detic_log["curr_lon"]
+    #             self.detic_log["prev_alt"] = self.detic_log["curr_alt"]
+
+    #         # Get the LLA state of the agent
+    #         detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(time).DataSets
+    #         detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0] # Group Items --> 0: TrueOfDateRotating, 1: Fixed
+    #         detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
+    #         detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
+
+    #         # Store the current LLA state
+    #         self.detic_log["curr_lat"] = detic_lat
+    #         self.detic_log["curr_lon"] = detic_lon
+    #         self.detic_log["curr_alt"] = detic_alt
+    #         self.detic_log["counter"] = 1
+
+    #         # Update the step gap progressively
+    #         self.detic_log["prev_step_gap"] = self.detic_log["curr_step_gap"]
+    #         self.detic_log["curr_step_gap"] = 2 * self.detic_log["curr_step_gap"]
+    #         self.detic_log["curr_step_gap"] = self.detic_log["curr_step_gap"] if self.detic_log["curr_step_gap"] <= self.agent_config["LLA_step_gap"] else self.agent_config["LLA_step_gap"]
+
+    #     else:
+    #         detic_lat = self.detic_log["curr_lat"]
+    #         detic_lon = self.detic_log["curr_lon"]
+    #         detic_alt = self.detic_log["curr_alt"]
+
+    #         # If there are previous LLA states, use them to interpolate the current LLA state
+    #         if self.detic_log["prev_lat"] != None:
+    #             prev_detic_lat = self.detic_log["prev_lat"]
+    #             prev_detic_lon = self.detic_log["prev_lon"]
+    #             prev_detic_alt = self.detic_log["prev_alt"]
+
+    #             fraction = self.detic_log["counter"] / self.detic_log["prev_step_gap"]
+    #             detic_lat, detic_lon, detic_alt = self.interpolate_LLA_state(prev_detic_lat, prev_detic_lon, prev_detic_alt, detic_lat, detic_lon, detic_alt, target_mg, fraction)
+
+    #         self.detic_log["counter"] += 1
+
+    #     return detic_lat, detic_lon, detic_alt
+    
+    # def interpolate_LLA_state(self, lat_0: float, lon_0: float, alt_0: float, lat_1: float, lon_1: float, alt_1: float, target_mg, fraction: float):
+    #     """
+    #     Interpolate the LLA state of the agent, using circular and linear interpolation.
+    #     """
+    #     # ------------------------------------- CLARIFICATION -------------------------------------
+    #     # The interpolation follows a circular path on the Earth's surface for coordinates
+    #     #   and a linear path for the altitude. The interpolation is done as follows:
+    #     # lat_2 = A * p_2 + B
+    #     # lon_2 = C * p_2 + D
+    #     # alt_2 = (alt_1 - alt_0) * (1 + fr) + alt_0
+    #     # Where, by means of 2 points (4 equations):
+    #     # A = (lat_1 - lat_0) / p1
+    #     # B = lat_0
+    #     # C = (lon_1 - lon_0) / p1
+    #     # D = lon_0
+    #     # And the distance in radians between the 2 points is:
+    #     # p1 = haversine_angle(lat_0, lon_0, lat_1, lon_1)
+    #     # p2 = p1 * (1 + fr)
+    #     # -----------------------------------------------------------------------------------------
+    #     p1 = target_mg.haversine_angle(lat_0, lon_0, lat_1, lon_1)
+    #     p2 = p1 * (1 + fraction)
+    #     lat = (lat_1 - lat_0) / p1 * p2 + lat_0
+    #     lon = (lon_1 - lon_0) / p1 * p2 + lon_0
+    #     alt = (alt_1 - alt_0) * (1 + fraction) + alt_0
+
+    #     return lat, lon, alt
 
     def update_target_memory(self, preferred_zones, all_zones):
         """
@@ -771,7 +862,7 @@ class TargetManager():
         
         return zone
     
-    def get_FoR_window_df(self, date_mg: DateManager, features_mg: FeaturesManager, margin_pct: float=10) -> pd.DataFrame:
+    def get_FoR_window_df(self, date_mg: DateManager, features_mg: FeaturesManager, margin_pct: float=10, return_D_FoR: bool=False) -> pd.DataFrame:
         """
         Return the Field of Regard (FoR) window dataframe.
         """
@@ -793,7 +884,10 @@ class TargetManager():
         # Filter the targets based on the field of regard
         FoR_window_df = FoR_window_df[FoR_window_df["distance"] <= D_FoR * (1 + margin_pct/100)] # 10% margin
 
-        return FoR_window_df
+        if return_D_FoR:
+            return FoR_window_df, D_FoR * (1 + margin_pct/100)
+        else:
+            return FoR_window_df
 
     def calculate_D_FoR(self, altitude: float):
         """
@@ -824,6 +918,31 @@ class TargetManager():
         c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
         return c
+    
+class GridManager():
+    """
+    Class to manage the grid of the model.
+    """
+    def __init__(self):
+        self.class_name = "Grid Manager"
+        self.grids = {}
+
+    def set_grid_data(self, nums: list, lats: list, lons: list):
+        """
+        Set the grid data (nums, lats, lons).
+        """
+        self.grid_data = {"nums": np.array(tuple(nums)), "lats [deg]": np.array(tuple(lats)), "lons [deg]": np.array(tuple(lons))}
+
+    def get_seen_points(self, value_by_point_FoM: list):
+        """
+        Get the seen points of the grid. Retuns a list of tuples (lat, lon).
+        """
+        value_by_point_FoM = np.array(value_by_point_FoM)
+
+        # Get the seen points
+        seen_lats = self.grid_data["lats [deg]"][value_by_point_FoM > 0]
+        seen_lons = self.grid_data["lons [deg]"][value_by_point_FoM > 0]
+        return [(lat, lon) for lat, lon in zip(seen_lats, seen_lons)]
 
 class Rewarder():
     """
@@ -839,13 +958,18 @@ class Rewarder():
         self.target_mg = target_mg
         self.agents_config = agents_config
 
-    def calculate_reward(self, data_providers, delta_time: float, date_mg: DateManager, sensor_mg: SensorManager, features_mg: FeaturesManager, angle_domains: dict):
+    def calculate_reward(self, data_providers, delta_time: float, grid_points_seen: list, FoR_window_df: pd.DataFrame, D_FoR: float, date_mg: DateManager, sensor_mg: SensorManager, features_mg: FeaturesManager, angle_domains: dict):
         """
         Return the reward of the state-action pair given the proper data providers (acces and aer).
         """
         reward = 0
 
+        # Add the negative reward of the slew constraint
         reward += self.slew_constraint(delta_time, sensor_mg, features_mg, angle_domains) * self.agents_config["slew_weight"]
+
+        if self.agents_config["use_grid"] and grid_points_seen is not None:
+            # Add the grid rewards
+            reward += self.grid_rewards(grid_points_seen, FoR_window_df, D_FoR)
 
         # Iterate over the access data providers
         for access_data_provider, aer_data_provider in data_providers:
@@ -966,6 +1090,46 @@ class Rewarder():
             r += -movement/domain
 
         return r
+    
+    def grid_rewards(self, grid_points_seen: list, FoR_window_df: pd.DataFrame, D_FoR: float):
+        """
+        Function rewarding the grid points seen by the agent. Distances in km.
+        """
+        reward = 0
+        # count = 0
+        # for_count = 0
+
+        # Reset the indices of the dataframe to ensure proper index access
+        FoR_window_df.reset_index(drop=True, inplace=True)
+
+        # Compute distance to each target
+        for lat, lon in grid_points_seen:
+            count += 1
+            for i in range(FoR_window_df.shape[0]):
+                distance = self.target_mg.haversine(lat, lon, FoR_window_df["lat [deg]"][i], FoR_window_df["lon [deg]"][i])
+                if distance < D_FoR:
+                    event_name = FoR_window_df["name"][i]
+
+                    # Get the zone information
+                    zone_n_obs = self.target_mg.get_n_obs(event_name)
+                    zone_priority = self.target_mg.get_priority(event_name)
+
+                    # Calculate cosine function
+                    A = self.agents_config["grid_weight"] * zone_priority * self.f_reobs(zone_n_obs) # amplitude
+                    B = np.pi / (2 * D_FoR) # argument
+                    r = A * np.cos(B * distance)**self.agents_config["grid_decay"] # reward
+                    r = r if r > 0 else 0
+
+                    if r < 0: # security check
+                        raise ValueError("Grid reward cannot be negative.")
+
+                    reward += r
+                    # for_count += 1
+                    # print(f"Grid point {count} seen. Distance to {event_name}: {distance:0.2f} km. Reward: {r:0.4f} (total of {reward:0.4f}). DFoR: {D_FoR:0.2f} km.")
+
+        # print(f"Grid points seen: {count}. Total of {for_count} calculations. Reward: {reward:0.4f}.")
+
+        return reward
     
 class Plotter():
     """

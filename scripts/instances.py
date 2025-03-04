@@ -158,6 +158,57 @@ class STKEnvironment():
             satellite, sensor_mg, features_mg, date_mg, attitude_mg = self.build_satellite(agent, self.scenario, i)
             self.satellites_tuples.append((satellite, sensor_mg, features_mg, date_mg, attitude_mg)) # append the satellite, its sensor manager and its date manager
 
+        if self.agents_config["use_grid"]:
+            self.generate_grid(self.scenario)
+
+    def generate_grid(self, scenario):
+        """
+        Generate the coverage grid and add sensors to the satellites.
+        """
+        # Create GridManager
+        self.grid_mg = GridManager()
+
+        # Add the sensors to the satellites
+        for satellite, sensor_mg, _, _, _ in self.satellites_tuples:
+            # Create the coverage grid
+            coverage = scenario.Children.New(AgESTKObjectType.eCoverageDefinition, 'MyCoverage')
+            coverage.Grid.BoundsType = AgECvBounds.eBoundsGlobal
+            covGrid = coverage.Grid
+
+            # Define the Grid Resolution
+            Res = covGrid.Resolution
+            Res.LatLon = self.agents_config["grid_resolution"] # deg
+
+            # Advanced configuration
+            advanced = coverage.Advanced
+            advanced.AutoRecompute = False
+            advanced.DataRetention = AgECvDataRetention.eAllData
+            advanced.SaveMode = AgEDataSaveMode.eSaveAccesses
+            coverage.AssetList.Add(f"Satellite/{satellite.InstanceName}/Sensor/{sensor_mg.sensor.InstanceName}")
+
+            # Append to the grid manager
+            self.grid_mg.grids[f"{satellite.InstanceName}"] = coverage
+
+        # Get the grid data
+        coverage.Interval.AnalysisInterval.SetStartAndStopTimes(scenario.StartTime, scenario.StartTime)
+        coverage.ComputeAccesses()
+
+        # Create figure of merit
+        figureOfMerit = coverage.Children.New(AgESTKObjectType.eFigureOfMerit, "MyFOM")
+
+        # Set the definition and compute type
+        figureOfMerit.SetDefinitionType(AgEFmDefinitionType.eFmNAssetCoverage) # this tells what the figure of merit is measuring
+        # See https://help.agi.com/stkdevkit/index.htm#DocX/STKObjects~IAgFigureOfMerit.html?Highlight=eFigureOfMerit
+        definition = figureOfMerit.Definition
+        definition.SetComputeType(AgEFmCompute.eMaximum) # this tells how the figure of merit is computed
+        fig = figureOfMerit.DataProviders.Item("Value By Point")
+        nums = fig.Exec().DataSets.GetDataSetByName("Point Number").GetValues()
+        lats = fig.Exec().DataSets.GetDataSetByName("Latitude").GetValues()
+        lons = fig.Exec().DataSets.GetDataSetByName("Longitude").GetValues()
+
+        # Store the grid data
+        self.grid_mg.set_grid_data(nums, lats, lons)
+
     def build_scenario(self, root: AgStkObjectRoot, agents_config) -> IAgStkObject:
         """
         Build the scenario based on the agent configuration.
@@ -168,7 +219,6 @@ class STKEnvironment():
         scenario.StartTime = agents_config["start_time"]
         scenario.StopTime = agents_config["stop_time"]
         scenario.SetTimePeriod(scenario.StartTime, scenario.StopTime)
-        # root.Rewind()
         return scenario
 
     def build_satellite(self, agent, scenario: IAgStkObject, idx) -> tuple[IAgStkObject, SensorManager, FeaturesManager, DateManager, AttitudeManager]:
@@ -250,14 +300,20 @@ class STKEnvironment():
         Set the propagator of the satellite based on the agent configuration.
         - HPOP: High Precision Orbit Propagator
         - J2Perturbation: J2 Perturbation Model
+        - J4Perturbation: J4 Perturbation Model
+        - TwoBody: Two Body Propagator (Earth as point mass)
         """
         # Set the propagator type depending on the configuration
         if self.agents_config["propagator"] == "HPOP":
             satellite.SetPropagatorType(AgEVePropagatorType.ePropagatorHPOP)
         elif self.agents_config["propagator"] == "J2Perturbation":
             satellite.SetPropagatorType(AgEVePropagatorType.ePropagatorJ2Perturbation)
+        elif self.agents_config["propagator"] == "J4Perturbation":
+            satellite.SetPropagatorType(AgEVePropagatorType.ePropagatorJ4Perturbation)
+        elif self.agents_config["propagator"] == "TwoBody":
+            satellite.SetPropagatorType(AgEVePropagatorType.ePropagatorTwoBody)
         else:
-            raise ValueError("Invalid propagator type. Please use 'HPOP' or 'J2Perturbation'.")
+            raise ValueError("Invalid propagator type. Please use 'HPOP', 'J2Perturbation', 'J4Perturbation' or 'TwoBody'.")
         
     def get_reference_frame_obj(self, agent):
         """
@@ -550,11 +606,8 @@ class STKEnvironment():
                 elif key == "d_el":
                     _ = sensor_mg.update_elevation(action[key])
                     change_sensor = True
-                elif key == "d_pitch":
-                    attitude_mg.update_pitch(action[key])
-                    change_attitude = True
-                elif key == "d_roll":
-                    attitude_mg.update_roll(action[key])
+                elif key == "d_pitch" or key == "d_roll":
+                    attitude_mg.update_roll_pitch(action["d_pitch"], action["d_roll"])
                     change_attitude = True
                 else:
                     raise ValueError("Invalid action. Please use 'd_az' or 'd_el'.")
@@ -672,7 +725,7 @@ class STKEnvironment():
             before = perf_counter()
 
         # Get the dataframe filtered on the window and the FoR
-        FoR_window_df = self.target_mg.get_FoR_window_df(date_mg=date_mg, features_mg=features_mg)
+        FoR_window_df, D_FoR = self.target_mg.get_FoR_window_df(date_mg=date_mg, features_mg=features_mg, return_D_FoR=True)
 
         if self.agents_config["debug"]:
             print(f"    Time taken to get FoR window dataframe: {perf_counter() - before:.2f} seconds.")
@@ -683,7 +736,7 @@ class STKEnvironment():
         for _, target in FoR_window_df.iterrows():
             access = sensor.GetAccessToObject(target["object"])
             access.AccessTimePeriod = AgEAccessTimeType.eUserSpecAccessTime
-            access.SpecifyAccessTimePeriod(target["start_time"], target["end_time"])
+            access.SpecifyAccessTimePeriod(date_mg.last_date, adj_current_date)
             access.ComputeAccess()
             access_data_provider = access.DataProviders.Item("Access Data").Exec(date_mg.last_date, adj_current_date)
             aer_data_provider = access.DataProviders.Item("AER Data").Group.Item("NorthEastDown").Exec(date_mg.last_date, adj_current_date, delta_time/10)
@@ -693,8 +746,35 @@ class STKEnvironment():
             print(f"    Time taken to get access data providers: {perf_counter() - before:.2f} seconds.")
             before = perf_counter()
 
+        # Get the grid and find the points seen
+        if self.agents_config["use_grid"]:
+            coverage = self.grid_mg.grids[satellite.InstanceName]
+            coverage.Interval.AnalysisInterval.SetStartAndStopTimes(date_mg.last_date, adj_current_date)
+            coverage.ComputeAccesses()
+
+            # Create figure of merit
+            coverage.Children.Unload(AgESTKObjectType.eFigureOfMerit, "MyFOM")
+            figureOfMerit = coverage.Children.New(AgESTKObjectType.eFigureOfMerit, "MyFOM")
+
+            # Set the definition and compute type
+            figureOfMerit.SetDefinitionType(AgEFmDefinitionType.eFmNAssetCoverage) # this tells what the figure of merit is measuring
+            # See https://help.agi.com/stkdevkit/index.htm#DocX/STKObjects~IAgFigureOfMerit.html?Highlight=eFigureOfMerit
+            definition = figureOfMerit.Definition
+            definition.SetComputeType(AgEFmCompute.eMaximum) # this tells how the figure of merit is computed
+            fig = figureOfMerit.DataProviders.Item("Value By Point")
+            fom_values = fig.Exec().DataSets.GetDataSetByName("FOM Value").GetValues()
+
+            # Gather hte seen latitudes and longitudes
+            grid_points_seen = self.grid_mg.get_seen_points(fom_values)
+        else:
+            grid_points_seen = None
+
+        if self.agents_config["debug"]:
+            print(f"    Time taken to get grid points seen: {perf_counter() - before:.2f} seconds.")
+            before = perf_counter()
+
         # Call the rewarder to calculate the reward
-        reward = rewarder.calculate_reward(data_providers, delta_time, date_mg, sensor_mg, features_mg, attitude_mg.angle_domains)
+        reward = rewarder.calculate_reward(data_providers, delta_time, grid_points_seen, FoR_window_df, D_FoR, date_mg, sensor_mg, features_mg, attitude_mg.angle_domains)
 
         if self.agents_config["debug"]:
             print(f"    Time taken to calculate reward: {perf_counter() - before:.2f} seconds.")
