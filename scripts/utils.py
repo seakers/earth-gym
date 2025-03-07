@@ -1248,6 +1248,11 @@ class Plotter():
         self.plot_cumulative_rewards()
         self.plot_cumulative_rewards_smoothed_per_steps(window_size=window_size)
 
+        # Export rewards to csv
+        if not os.path.exists(self.out_folder_path):
+            os.makedirs(self.out_folder_path)
+        self.rewards.to_csv(f"{self.out_folder_path}/rewards.csv", index=False)
+
     def correct_window_size(self, window_size: int):
         """
         Correct the window size if it is negative.
