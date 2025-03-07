@@ -3,7 +3,7 @@
         "debug": false,
         "scenario_name": "SAC",
         "start_time": "1 Jan 2000 00:00:00.000",
-        "stop_time": "1 May 2000 0:00:00.000",
+        "stop_time": "1 Feb 2001 0:00:00.000",
         "propagator": "TwoBody",
         "deep_training": true
     },
