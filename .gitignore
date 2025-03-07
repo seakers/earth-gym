@@ -12,3 +12,6 @@ __pycache__/
 
 # VSCode folder
 .vscode/
+
+# Output folder
+output/
