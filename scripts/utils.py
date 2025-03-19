@@ -660,79 +660,6 @@ class FeaturesManager():
         self.detic_log["all_time_counter"] += 1
 
         return float(detic_lat), float(detic_lon), float(detic_alt)
-    
-    # def get_LLA_state_OLD(self, satellite: IAgStkObject, target_mg, time: str):
-    #     """
-    #     Get the LLA state of the agent. Interpolation is used to get the LLA state, given the high computational cost.
-    #     """
-    #     if self.detic_log["counter"] == 0 or self.detic_log["counter"] >= self.detic_log["curr_step_gap"]: # it takes high computational cost to get the LLA state
-    #         # Save the previous LLA state if it is not the first time
-    #         if self.detic_log["counter"] != 0:
-    #             self.detic_log["prev_lat"] = self.detic_log["curr_lat"]
-    #             self.detic_log["prev_lon"] = self.detic_log["curr_lon"]
-    #             self.detic_log["prev_alt"] = self.detic_log["curr_alt"]
-
-    #         # Get the LLA state of the agent
-    #         detic_dataset = satellite.DataProviders.Item("LLA State").Group.Item(1).ExecSingle(time).DataSets
-    #         detic_lat = detic_dataset.GetDataSetByName("Lat").GetValues()[0] # Group Items --> 0: TrueOfDateRotating, 1: Fixed
-    #         detic_lon = detic_dataset.GetDataSetByName("Lon").GetValues()[0]
-    #         detic_alt = detic_dataset.GetDataSetByName("Alt").GetValues()[0]
-
-    #         # Store the current LLA state
-    #         self.detic_log["curr_lat"] = detic_lat
-    #         self.detic_log["curr_lon"] = detic_lon
-    #         self.detic_log["curr_alt"] = detic_alt
-    #         self.detic_log["counter"] = 1
-
-    #         # Update the step gap progressively
-    #         self.detic_log["prev_step_gap"] = self.detic_log["curr_step_gap"]
-    #         self.detic_log["curr_step_gap"] = 2 * self.detic_log["curr_step_gap"]
-    #         self.detic_log["curr_step_gap"] = self.detic_log["curr_step_gap"] if self.detic_log["curr_step_gap"] <= self.agent_config["LLA_step_gap"] else self.agent_config["LLA_step_gap"]
-
-    #     else:
-    #         detic_lat = self.detic_log["curr_lat"]
-    #         detic_lon = self.detic_log["curr_lon"]
-    #         detic_alt = self.detic_log["curr_alt"]
-
-    #         # If there are previous LLA states, use them to interpolate the current LLA state
-    #         if self.detic_log["prev_lat"] != None:
-    #             prev_detic_lat = self.detic_log["prev_lat"]
-    #             prev_detic_lon = self.detic_log["prev_lon"]
-    #             prev_detic_alt = self.detic_log["prev_alt"]
-
-    #             fraction = self.detic_log["counter"] / self.detic_log["prev_step_gap"]
-    #             detic_lat, detic_lon, detic_alt = self.interpolate_LLA_state(prev_detic_lat, prev_detic_lon, prev_detic_alt, detic_lat, detic_lon, detic_alt, target_mg, fraction)
-
-    #         self.detic_log["counter"] += 1
-
-    #     return detic_lat, detic_lon, detic_alt
-    
-    # def interpolate_LLA_state(self, lat_0: float, lon_0: float, alt_0: float, lat_1: float, lon_1: float, alt_1: float, target_mg, fraction: float):
-    #     """
-    #     Interpolate the LLA state of the agent, using circular and linear interpolation.
-    #     """
-    #     # ------------------------------------- CLARIFICATION -------------------------------------
-    #     # The interpolation follows a circular path on the Earth's surface for coordinates
-    #     #   and a linear path for the altitude. The interpolation is done as follows:
-    #     # lat_2 = A * p_2 + B
-    #     # lon_2 = C * p_2 + D
-    #     # alt_2 = (alt_1 - alt_0) * (1 + fr) + alt_0
-    #     # Where, by means of 2 points (4 equations):
-    #     # A = (lat_1 - lat_0) / p1
-    #     # B = lat_0
-    #     # C = (lon_1 - lon_0) / p1
-    #     # D = lon_0
-    #     # And the distance in radians between the 2 points is:
-    #     # p1 = haversine_angle(lat_0, lon_0, lat_1, lon_1)
-    #     # p2 = p1 * (1 + fr)
-    #     # -----------------------------------------------------------------------------------------
-    #     p1 = target_mg.haversine_angle(lat_0, lon_0, lat_1, lon_1)
-    #     p2 = p1 * (1 + fraction)
-    #     lat = (lat_1 - lat_0) / p1 * p2 + lat_0
-    #     lon = (lon_1 - lon_0) / p1 * p2 + lon_0
-    #     alt = (alt_1 - alt_0) * (1 + fraction) + alt_0
-
-    #     return lat, lon, alt
 
     def update_target_memory(self, preferred_zones, all_zones):
         """
@@ -903,21 +830,22 @@ class TargetManager():
         c = self.haversine_angle(lat1, lon1, lat2, lon2)
 
         return RT * c
-    
+
     def haversine_angle(self, lat1, lon1, lat2, lon2):
         """
         Calculate the great circle distance between two points on the earth (specified in decimal degrees).
+        Vectorized implementation for improved performance.
         """
-        # Convert degrees to radians
-        lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+        # Convert degrees to radians in a single step
+        lat1, lon1, lat2, lon2 = np.radians([lat1, lon1, lat2, lon2])
 
-        # Haversine formula
+        # Compute differences
         dlat = lat2 - lat1
         dlon = lon2 - lon1
-        a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
-        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-        return c
+        # Vectorized haversine formula
+        a = np.sin(dlat / 2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2)**2
+        return 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
     
 class GridManager():
     """
