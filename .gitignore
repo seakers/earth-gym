@@ -7,8 +7,9 @@ __pycache__/
 *.jpg
 *.jpeg
 
-#Simulation log files
+# Simulation log files
 *.log
+*.prof
 
 # VSCode folder
 .vscode/
