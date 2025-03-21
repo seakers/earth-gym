@@ -1,0 +1,55 @@
+agi.stk12 @ file:///home/geri/tfg/STKEngineData/stk12.9.0/bin/AgPythonAPI/agi.stk12-12.9.0-py3-none-any.whl#sha256=15974f2d63a42fee07a8a745af0fe9f5c154b60c9e9308a047e8d0172382db5b
+asttokens==3.0.0
+Bottleneck @ file:///croot/bottleneck_1731058641041/work
+Brotli @ file:///croot/brotli-split_1736182456865/work
+comm==0.2.2
+contourpy @ file:///croot/contourpy_1732540045555/work
+cycler @ file:///tmp/build/80754af9/cycler_1637851556182/work
+debugpy==1.8.12
+decorator==5.2.1
+executing==2.2.0
+fonttools @ file:///croot/fonttools_1737039080035/work
+ipykernel==6.29.5
+ipython==9.0.0
+ipython_pygments_lexers==1.1.1
+jedi==0.19.2
+jupyter_client==8.6.3
+jupyter_core==5.7.2
+kiwisolver @ file:///croot/kiwisolver_1737039087198/work
+matplotlib==3.10.0
+matplotlib-inline==0.1.7
+mkl-service==2.4.0
+mkl_fft @ file:///io/mkl313/mkl_fft_1730824109137/work
+mkl_random @ file:///io/mkl313/mkl_random_1730823916628/work
+nest-asyncio==1.6.0
+numexpr @ file:///croot/numexpr_1730215937391/work
+numpy @ file:///croot/numpy_and_numpy_base_1725470312869/work/dist/numpy-2.0.1-cp312-cp312-linux_x86_64.whl#sha256=e2374991344fa2241a2153ef3d550d3a1cd2d50cb1f1d51eddc82870abc88021
+packaging @ file:///croot/packaging_1734472117206/work
+pandas @ file:///croot/pandas_1732735089971/work/dist/pandas-2.2.3-cp312-cp312-linux_x86_64.whl#sha256=57b66702d418720ec8483f7c4ec7c08d41815316ad7ce09d5b7bbc34eefcfdfd
+parso==0.8.4
+pexpect==4.9.0
+pillow @ file:///croot/pillow_1734430590456/work
+platformdirs==4.3.6
+ply @ file:///work/perseverance-python-buildout/croot/ply_1698846188635/work
+prompt_toolkit==3.0.50
+psutil @ file:///croot/psutil_1736367091698/work
+ptyprocess==0.7.0
+pure_eval==0.2.3
+Pygments==2.19.1
+pyparsing @ file:///croot/pyparsing_1731445506121/work
+PyQt5==5.15.10
+PyQt5_sip @ file:///croot/pyqt-split_1736540531116/work/pyqt_sip
+python-dateutil @ file:///croot/python-dateutil_1716495738603/work
+pytz @ file:///croot/pytz_1713974312559/work
+pyzmq==26.2.1
+scipy @ file:///croot/scipy_1737122901252/work/dist/scipy-1.15.1-cp312-cp312-linux_x86_64.whl#sha256=7b1b0001c943e119509d010e5cbb4950dd6e325a83ca2510a25f139dac6d66a8
+setuptools==75.1.0
+sip @ file:///croot/sip_1736541134699/work
+six @ file:///tmp/build/80754af9/six_1644875935023/work
+stack-data==0.6.3
+tornado @ file:///croot/tornado_1733960490606/work
+traitlets==5.14.3
+tzdata @ file:///croot/python-tzdata_1690578112552/work
+unicodedata2 @ file:///croot/unicodedata2_1736541023050/work
+wcwidth==0.2.13
+wheel==0.44.0
