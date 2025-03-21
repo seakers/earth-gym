@@ -11,8 +11,9 @@ __pycache__/
 *.log
 *.prof
 
-# VSCode folder
+# Code runners
 .vscode/
+src/run.sh
 
 # Output folder
 output/
