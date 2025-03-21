@@ -17,3 +17,6 @@ src/run.sh
 
 # Output folder
 output/
+
+# Environments
+.venv/
