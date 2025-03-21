@@ -1,4 +1,8 @@
 # Earth Gym
+
+![License](https://img.shields.io/badge/license-MIT-750014.svg)
+![py3comp](https://img.shields.io/badge/py3-compatible-306998.svg)
+
 Gym for RL-trained satellite models.
 
 ## Requirements
