@@ -10,6 +10,8 @@ from scripts.instances import Gym
 
 if __name__ == "__main__":
     try:
+        print("Starting the main script of ppo-eos...")
+
         # Time before the process
         start_time = datetime.now()
 
