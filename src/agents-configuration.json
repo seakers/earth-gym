@@ -3,13 +3,13 @@
         "debug": false,
         "scenario_name": "SAC",
         "start_time": "1 Jan 2000 00:00:00.000",
-        "stop_time": "1 May 2001 0:00:00.000",
+        "stop_time": "1 May 2000 0:00:00.000",
         "propagator": "TwoBody",
         "deep_training": true
     },
     "targets_and_grid": {
         "visible_targets": 100,
-        "use_grid": true,
+        "use_grid": false,
         "grid_resolution": 5
     },
     "reward_metrics": {
@@ -53,7 +53,7 @@
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
             },
-            "states_features": ["pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1"],
+            "states_features": ["pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_5", "lon_5", "priority_5"],
             "actions_features": ["d_pitch", "d_roll"]
         }
     ]

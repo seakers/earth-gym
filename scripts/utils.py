@@ -453,7 +453,7 @@ class FeaturesManager():
         # Initialize the states and actions objects
         self.state = {}
         self.action = {}
-        self.states_features = agent["states_features"]
+        self.states_features = self.extend_states_features(agent["states_features"], extendable_groups=[["lat_", "lon_", "priority_"]])
         self.actions_features = agent["actions_features"]
         self.target_memory = 0
         self.aux_state = {"detic_lat": None, "detic_lon": None, "detic_alt": None}
@@ -472,6 +472,26 @@ class FeaturesManager():
         # Iterate over the actions
         for action in self.actions_features:
             self.action[action] = 0
+    
+    def extend_states_features(self, array, extendable_groups):
+        """
+        Create the extended states features of the agent.
+        """
+        max_index = [0] * len(extendable_groups)
+        for key in array:
+            for i, group in enumerate(extendable_groups):
+                if key.startswith(group[0]):
+                    index = int(key.split("_")[1])
+                    if index > max_index[i]:
+                        max_index[i] = index
+
+        # Add the missing lat_ lon_ and priority_ features
+        for i, group in enumerate(extendable_groups):
+            for j in range(1, max_index[i] + 1):
+                if f"{group[0]}{j}" not in array:
+                    array += [f"{group[k]}{j}" for k in range(len(group))]
+
+        return array
     
     def get_state(self, name: str=None):
         """
@@ -552,11 +572,11 @@ class FeaturesManager():
         if "detic_alt" in self.state.keys():
             self.update_state("detic_alt", detic_alt)
 
-    def update_entire_aux_state(self, satellite: IAgStkObject, target_mg, time: str):
+    def update_entire_aux_state(self, satellite: IAgStkObject, time: str):
         """
         Update the auxiliar state of the agent.
         """
-        detic_lat, detic_lon, detic_alt = self.get_LLA_state(satellite, target_mg, time)
+        detic_lat, detic_lon, detic_alt = self.get_LLA_state(satellite, time)
 
         if "detic_lat" in self.aux_state.keys():
             self.update_aux_state("detic_lat", detic_lat)
@@ -571,7 +591,7 @@ class FeaturesManager():
         """
         return self.aux_state if name is None else self.aux_state[name]
     
-    def get_LLA_state(self, satellite: IAgStkObject, target_mg, time: str):
+    def get_LLA_state(self, satellite: IAgStkObject, time: str):
         """
         Get the LLA state of the agent. Interpolation is used to get the LLA state, given the high computational cost.
         """

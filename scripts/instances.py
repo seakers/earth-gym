@@ -267,11 +267,11 @@ class STKEnvironment():
         self.stk_root.ExecuteCommand(cmd)
 
         # Update all necessary auxiliar features
-        features_mg.update_entire_aux_state(satellite, self.target_mg, scenario.StartTime)
+        features_mg.update_entire_aux_state(satellite, scenario.StartTime)
 
         # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
         checked_var = []
-        for var in agent["states_features"]:
+        for var in features_mg.states_features:
             if var not in checked_var:
                 if var in ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]:
                     checked_var += ["a", "e", "i", "raan", "aop", "ta"] + ["x", "y", "z", "vx", "vy", "vz"]
@@ -665,7 +665,7 @@ class STKEnvironment():
         orbital_elements = self.get_orbital_elements(satellite, date_mg.current_date, features_mg.agent_config)
 
         # Update all necessary auxiliar features
-        features_mg.update_entire_aux_state(satellite, self.target_mg, date_mg.current_date)
+        features_mg.update_entire_aux_state(satellite, date_mg.current_date)
 
         # Fill the custom states features for all those which do not belong ot the initial state from the agent configuration
         checked_var = []
@@ -712,7 +712,7 @@ class STKEnvironment():
         satellite, sensor_mg, features_mg, date_mg, attitude_mg = self.get_satellite(agent_id)
 
         # Create the rewarder
-        rewarder = self.rewarder
+        rewarder: Rewarder = self.rewarder
 
         # Create the access data providers
         data_providers = []
