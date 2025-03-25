@@ -21,6 +21,7 @@ class Gym():
     def __init__(self, args):
         self.initialize_args(args)
         self.running = True
+        self.shutdown_complete = False
 
     def initialize_args(self, args):
         """
@@ -66,17 +67,29 @@ class Gym():
         """
         return self.stk_env.step(agent_id, action, delta_time)
     
+    def shutdown(self):
+        """
+        Shutdown the environment.
+        """
+        if not self.stk_env.agents_config["deep_training"]:
+            self.stk_env.stk_root.SaveScenario()
+        self.stk_env.stk_root.CloseScenario()
+
+        # Perform final displays of the period
+        self.generate_output()
+
+        # Memory used
+        process = psutil.Process(os.getpid())
+        memory_used = process.memory_info().rss
+        print(f"Memory used: {memory_used / (1024 ** 2):.2f} MB")
+        self.shutdown_complete = True
+    
     def generate_output(self):
         """
         Perform final displays of the period.
         """
         # Plot all the reward graphics available
         self.stk_env.plotter.plot_all()
-
-        # Memory used
-        process = psutil.Process(os.getpid())
-        memory_used = process.memory_info().rss
-        print(f"Memory used: {memory_used / (1024 ** 2):.2f} MB")
     
     def handle_request(self, request):
         """
@@ -94,10 +107,7 @@ class Gym():
             state, reward, done = self.get_next_state_and_reward(request_data["agent_id"], request_data["action"], request_data["delta_time"])
             return json.dumps({"state": state, "reward": reward, "done": done})
         elif request_data["command"] == "shutdown":
-            if not self.stk_env.agents_config["deep_training"]:
-                self.stk_env.stk_root.SaveScenario()
-            self.stk_env.stk_root.CloseScenario()
-            self.generate_output()
+            self.shutdown()
             self.running = False
             return json.dumps({"status": "shutdown_complete"})
         else:
@@ -130,6 +140,12 @@ class Gym():
         # Close the connection
         conn.close()
         server_socket.close()
+
+    def is_shutdown(self):
+        """
+        Return the shutdown status.
+        """
+        return self.shutdown_complete
 
 class STKEnvironment():
     """

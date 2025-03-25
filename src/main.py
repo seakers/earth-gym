@@ -80,6 +80,10 @@ if __name__ == "__main__":
         # Time after the process
         end_time = datetime.now()
 
+        # Check whether the gym is shut down
+        if not gym_env.is_shutdown():
+            gym_env.shutdown()
+
         # Calculate the time difference
         time_diff = end_time - start_time
         print(f"Time elapsed: {time_diff}")
