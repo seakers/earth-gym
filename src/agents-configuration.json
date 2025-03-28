@@ -1,9 +1,9 @@
 {
     "general": {
         "debug": false,
-        "scenario_name": "SAC",
+        "scenario_name": "PPO",
         "start_time": "1 Jan 2000 00:00:00.000",
-        "stop_time": "1 May 2000 0:00:00.000",
+        "stop_time": "1 May 2004 0:00:00.000",
         "propagator": "TwoBody",
         "deep_training": true
     },
@@ -19,7 +19,7 @@
         "priority_weight": 1,
         "grid_weight": 0.05,
         "grid_decay": 30,
-        "slew_weight": 0.1
+        "slew_weight": 0.2
     },
     "agents": [
         {
@@ -32,7 +32,7 @@
                 "initial_orbital_elements": {
                     "a": 8000,
                     "e": 0,
-                    "i": 30,
+                    "i": 0,
                     "raan": 0,
                     "aop": 0,
                     "ta": 0
@@ -53,7 +53,7 @@
                     "initial_azimuth": 0.0,
                     "initial_elevation": 90.0
             },
-            "states_features": ["pitch", "roll", "detic_lat", "detic_lon", "detic_alt", "lat_5", "lon_5", "priority_5"],
+            "states_features": ["detic_lat", "detic_lon", "detic_alt", "lat_1", "lon_1", "priority_1"],
             "actions_features": ["d_pitch", "d_roll"]
         }
     ]
