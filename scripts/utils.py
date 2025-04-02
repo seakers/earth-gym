@@ -686,8 +686,18 @@ class FeaturesManager():
         Update the target memory of the agent.
         """
         if not preferred_zones.empty:
-            n_selected = self.target_memory if self.target_memory <= preferred_zones.shape[0] else preferred_zones.shape[0]
-            seeking_zones = preferred_zones.sample(n_selected, ignore_index=True)
+            # n_selected = self.target_memory if self.target_memory <= preferred_zones.shape[0] else preferred_zones.shape[0]
+            n_selected = min(self.target_memory, preferred_zones.shape[0])
+
+            # Acquire weights for the preferred zones if they exist
+            if "priority" in preferred_zones.columns:
+                weights = preferred_zones["priority"].astype(float)
+                weights = weights / weights.sum()
+                seeking_zones = preferred_zones.sample(n_selected, weights=weights, ignore_index=True)
+            else:
+                seeking_zones = preferred_zones.sample(n_selected, ignore_index=True)
+            
+            # Fill the rest of the memory with out-of-FoR zones
             if n_selected != self.target_memory:
                 seeking_zones = pd.concat([seeking_zones, all_zones.sample(self.target_memory - n_selected, ignore_index=True)], ignore_index=True)
         else:
