@@ -19,3 +19,6 @@ $PYTHON -u $FILE \
     --out $WORKSPACE/output \
     --pro 0 \
     2>&1 | tee >(tail -n 3000 > $PRINT)
+
+echo "Entire configuration file below:" >> $PRINT
+cat $WORKSPACE/src/agents-configuration.json >> $PRINT
