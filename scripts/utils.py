@@ -473,7 +473,7 @@ class FeaturesManager():
         for action in self.actions_features:
             self.action[action] = 0
     
-    def extend_states_features(self, array, extendable_groups):
+    def extend_states_features(self, array: list, extendable_groups):
         """
         Create the extended states features of the agent.
         """
@@ -488,8 +488,10 @@ class FeaturesManager():
         # Add the missing lat_ lon_ and priority_ features
         for i, group in enumerate(extendable_groups):
             for j in range(1, max_index[i] + 1):
-                if f"{group[0]}{j}" not in array:
-                    array += [f"{group[k]}{j}" for k in range(len(group))]
+                if f"{group[0]}{j}" in array:
+                    for k in range(len(group)):
+                        array.remove(f"{group[k]}{j}")
+                array += [f"{group[k]}{j}" for k in range(len(group))]
 
         return array
     
