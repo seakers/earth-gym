@@ -441,9 +441,10 @@ class FeaturesManager():
     - update_state: update the state properties of the agent.
     - update_action: update the action properties of the agent.
     """
-    def __init__(self, agent):
+    def __init__(self, agent, rewarder):
         self.class_name = "Features Manager"
         self.agent_config = agent
+        self.rewarder = rewarder
         self.set_properties(agent)
 
     def set_properties(self, agent):
@@ -708,7 +709,7 @@ class FeaturesManager():
         for i in range(self.target_memory):
             self.update_state(f"lat_{i+1}", seeking_zones["lat [deg]"][i])
             self.update_state(f"lon_{i+1}", seeking_zones["lon [deg]"][i])
-            self.update_state(f"priority_{i+1}", seeking_zones["priority"][i])
+            self.update_state(f"priority_{i+1}", seeking_zones["priority"][i] * self.rewarder.f_reobs(seeking_zones["n_obs"][i]))
         
     def long_name_of(self, short_name):
         """
@@ -967,7 +968,7 @@ class Rewarder():
                         zone_priority = self.target_mg.get_priority(event_name)
 
                         # Check is long enough based on min_duration
-                        if (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:                            
+                        if (date_mg.num_of_date(date_mg.simplify_date(stop_time[j])) - date_mg.num_of_date(date_mg.simplify_date(start_time[j]))) > min_duration:
                             # Check if the event has been seen before and how many times
                             if zone_n_obs != 0:
                                 # Check the number of observations is not negative

@@ -270,7 +270,7 @@ class STKEnvironment():
         sensor.CommonTasks.SetPointingFixedAzEl(sensor_mg.current_azimuth, sensor_mg.current_elevation, AgEAzElAboutBoresight.eAzElAboutBoresightRotate)
 
         # Create the features manager
-        features_mg = FeaturesManager(agent)
+        features_mg = FeaturesManager(agent, self.rewarder)
 
         # Create the date manager
         date_mg = DateManager(scenario.StartTime, scenario.StopTime)
