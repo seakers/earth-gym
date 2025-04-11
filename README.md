@@ -5,6 +5,8 @@
 
 Gym for RL-trained satellite models.
 
+![Demo](docs/demo.gif)
+
 ## Requirements
 Simple steps to run the code.
 1. Install anaconda or miniconda (do not create environment yet).
