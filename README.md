@@ -6,6 +6,7 @@
 Gym for RL-trained satellite models.
 
 ![Demo](docs/demo.gif)
+*Figure: Orbit visualization generated using ANSYS STK.*
 
 ## Requirements
 Simple steps to run the code.
