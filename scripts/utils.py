@@ -709,7 +709,7 @@ class FeaturesManager():
         for i in range(self.target_memory):
             self.update_state(f"lat_{i+1}", seeking_zones["lat [deg]"][i])
             self.update_state(f"lon_{i+1}", seeking_zones["lon [deg]"][i])
-            self.update_state(f"priority_{i+1}", seeking_zones["priority"][i] * self.rewarder.f_reobs(seeking_zones["n_obs"][i]))
+            self.update_state(f"priority_{i+1}", seeking_zones["priority"][i] * self.rewarder.f_reobs(seeking_zones["n_obs"][i] + 1))
         
     def long_name_of(self, short_name):
         """

@@ -3,7 +3,7 @@
         "debug": false,
         "scenario_name": "PPO",
         "start_time": "1 Jan 2000 00:00:00.000",
-        "stop_time": "1 May 2004 0:00:00.000",
+        "stop_time": "1 May 2012 0:00:00.000",
         "propagator": "TwoBody",
         "deep_training": true
     },
